@@ -1,0 +1,65 @@
+
+import { useState } from 'react';
+import { useSocketChess } from '@/hooks/useSocketChess';
+import { Button } from '@/components/ui/button';
+import { Loader2, Wifi, WifiOff } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+export function ChessSocketStatus() {
+  const { connected, connecting, retry } = useSocketChess();
+  const { toast } = useToast();
+  const [reconnecting, setReconnecting] = useState(false);
+
+  const handleReconnect = async () => {
+    setReconnecting(true);
+    toast({
+      title: "Reconnecting",
+      description: "Attempting to connect to the chess server..."
+    });
+    
+    try {
+      const success = await retry();
+      if (success) {
+        toast({
+          title: "Connected",
+          description: "Successfully connected to the chess server"
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: "Could not connect to the chess server. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setReconnecting(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      <Button 
+        variant="ghost" 
+        size="sm"
+        className={connected ? "text-green-500" : "text-red-500"}
+        onClick={handleReconnect}
+        disabled={connecting || reconnecting}
+      >
+        {connecting || reconnecting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : connected ? (
+          <Wifi className="h-4 w-4" />
+        ) : (
+          <WifiOff className="h-4 w-4" />
+        )}
+        <span className="ml-2 text-xs">
+          {connecting || reconnecting 
+            ? "Connecting..." 
+            : connected 
+              ? "Chess Server Connected" 
+              : "Chess Server Offline"}
+        </span>
+      </Button>
+    </div>
+  );
+}

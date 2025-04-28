@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,14 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				chess: {
+					'dark': '#1E1E24',
+					'light': '#F0D9B5',
+					'brown': '#B58863',
+					'accent': '#E2C044',
+					'win': '#4CAF50',
+					'loss': '#F44336',
 				}
 			},
 			borderRadius: {
@@ -84,11 +93,16 @@ export default {
 					to: {
 						height: '0'
 					}
-				}
+				},
+                'pulse-gold': {
+                    '0%, 100%': { opacity: '1' },
+                    '50%': { opacity: '0.6' },
+                }
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+                'pulse-gold': 'pulse-gold 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
 			}
 		}
 	},

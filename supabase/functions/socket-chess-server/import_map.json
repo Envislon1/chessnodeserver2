@@ -1,0 +1,7 @@
+
+{
+  "imports": {
+    "socket.io": "https://esm.sh/socket.io@4.7.2?deno-std=0.145.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.38.0"
+  }
+}
