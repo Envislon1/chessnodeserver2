@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Server } from "socket.io";
 import { createClient } from "@supabase/supabase-js";
 
 // Initialize Supabase client
@@ -40,21 +39,33 @@ interface Match {
 class ChessMatchManager {
   private users: Map<string, User> = new Map();
   private matches: Map<string, Match> = new Map();
+  private connections: Map<string, WebSocket> = new Map();
 
   constructor() {}
 
   // User management
-  addUser(id: string, username: string, socketId: string): void {
+  addUser(id: string, username: string, socketId: string, socket: WebSocket): void {
     this.users.set(id, { id, username, socketId });
+    this.connections.set(socketId, socket);
     console.log(`Added user: ${username} (${id})`);
   }
 
-  removeUser(id: string): void {
-    if (this.users.has(id)) {
-      const user = this.users.get(id)!;
-      console.log(`Removed user: ${user.username} (${id})`);
-      this.users.delete(id);
+  removeUser(socketId: string): void {
+    let userId = "";
+    for (const [id, user] of this.users.entries()) {
+      if (user.socketId === socketId) {
+        userId = id;
+        break;
+      }
     }
+    
+    if (userId) {
+      const user = this.users.get(userId)!;
+      console.log(`Removed user: ${user.username} (${userId})`);
+      this.users.delete(userId);
+    }
+    
+    this.connections.delete(socketId);
   }
 
   getUserBySocketId(socketId: string): User | undefined {
@@ -62,6 +73,14 @@ class ChessMatchManager {
       if (user.socketId === socketId) {
         return user;
       }
+    }
+    return undefined;
+  }
+  
+  getSocketByUserId(userId: string): WebSocket | undefined {
+    const user = this.users.get(userId);
+    if (user) {
+      return this.connections.get(user.socketId);
     }
     return undefined;
   }
@@ -220,77 +239,168 @@ class ChessMatchManager {
       winner: null
     };
   }
+  
+  notifyMatchUpdate(match: Match): void {
+    if (match.whitePlayerId) {
+      const whiteSocket = this.getSocketByUserId(match.whitePlayerId);
+      if (whiteSocket && whiteSocket.readyState === WebSocket.OPEN) {
+        whiteSocket.send(JSON.stringify({
+          type: 'matchUpdate',
+          match
+        }));
+      }
+    }
+    
+    if (match.blackPlayerId) {
+      const blackSocket = this.getSocketByUserId(match.blackPlayerId);
+      if (blackSocket && blackSocket.readyState === WebSocket.OPEN) {
+        blackSocket.send(JSON.stringify({
+          type: 'matchUpdate',
+          match
+        }));
+      }
+    }
+  }
+  
+  notifyGameStateUpdate(matchId: string, gameState: any): void {
+    const match = this.matches.get(matchId);
+    if (!match) return;
+    
+    if (match.whitePlayerId) {
+      const whiteSocket = this.getSocketByUserId(match.whitePlayerId);
+      if (whiteSocket && whiteSocket.readyState === WebSocket.OPEN) {
+        whiteSocket.send(JSON.stringify({
+          type: 'gameStateUpdate',
+          matchId,
+          gameState
+        }));
+      }
+    }
+    
+    if (match.blackPlayerId) {
+      const blackSocket = this.getSocketByUserId(match.blackPlayerId);
+      if (blackSocket && blackSocket.readyState === WebSocket.OPEN) {
+        blackSocket.send(JSON.stringify({
+          type: 'gameStateUpdate',
+          matchId,
+          gameState
+        }));
+      }
+    }
+  }
 }
+
+// Create match manager
+const matchManager = new ChessMatchManager();
+
+// Define CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  // Check if it's a WebSocket request
+  const upgradeHeader = req.headers.get('upgrade');
+  if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
+    return new Response('Expected WebSocket request', { 
+      status: 426,
+      headers: { ...corsHeaders, 'Upgrade': 'WebSocket' }
     });
   }
 
+  // Handle WebSocket connection
   try {
-    // Create a Socket.IO server
-    const socketServer = new Server({
-      cors: {
-        origin: "*",
-        methods: ["GET", "POST"],
-      },
-    });
-
-    const matchManager = new ChessMatchManager();
-
-    socketServer.on("connection", (socket) => {
-      const { userId, username } = socket.handshake.auth;
-      
-      if (!userId || !username) {
-        console.log("Connection rejected: missing user data");
-        socket.disconnect();
-        return;
-      }
-      
-      console.log(`User connected: ${username} (${userId})`);
-      matchManager.addUser(userId, username, socket.id);
-
-      // Match creation
-      socket.on("createMatch", (matchData, callback) => {
-        try {
-          const match = matchManager.createMatch({
-            ...matchData,
-            whitePlayerId: userId,
-            whiteUsername: username,
-          });
-          
-          // Emit an event to all connected clients about the new match
-          socketServer.emit("matchCreated", match);
-          
-          if (callback) callback({ success: true, match });
-        } catch (error) {
-          console.error("Error creating match:", error);
-          if (callback) callback({ success: false, error: "Failed to create match" });
-        }
-      });
-
-      // Join match
-      socket.on("joinMatch", async ({ matchId }, callback) => {
-        try {
-          const match = matchManager.joinMatch(matchId, userId, username);
-          
-          if (!match) {
-            if (callback) callback({ success: false, error: "Match not found or cannot be joined" });
+    const { socket, response } = Deno.upgradeWebSocket(req);
+    const socketId = crypto.randomUUID();
+    
+    socket.onopen = () => {
+      console.log(`WebSocket connection opened: ${socketId}`);
+    };
+    
+    socket.onmessage = async (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        const { type, requestId } = message;
+        
+        console.log(`Received message type: ${type}`);
+        
+        // Handle authentication
+        if (type === 'auth') {
+          const { userId, username } = message;
+          if (!userId || !username) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Missing user credentials'
+            }));
             return;
           }
           
-          // Join the socket room for this match
-          socket.join(matchId);
+          matchManager.addUser(userId, username, socketId, socket);
+          socket.send(JSON.stringify({
+            requestId,
+            type: 'authSuccess',
+            userId,
+            username
+          }));
+        }
+        
+        // Handle create match
+        else if (type === 'createMatch') {
+          const user = matchManager.getUserBySocketId(socketId);
+          if (!user) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not authenticated'
+            }));
+            return;
+          }
           
-          // Emit an event to all users in the match
-          socketServer.to(matchId).emit("matchUpdate", match);
+          const match = matchManager.createMatch({
+            ...message.matchData,
+            whitePlayerId: user.id,
+            whiteUsername: user.username,
+          });
+          
+          socket.send(JSON.stringify({
+            requestId,
+            type: 'createMatchSuccess',
+            success: true,
+            match
+          }));
+        }
+        
+        // Handle join match
+        else if (type === 'joinMatch') {
+          const user = matchManager.getUserBySocketId(socketId);
+          if (!user) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not authenticated'
+            }));
+            return;
+          }
+          
+          const match = matchManager.joinMatch(message.matchId, user.id, user.username);
+          if (!match) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Match not found or cannot be joined'
+            }));
+            return;
+          }
+          
+          // Notify both players about the update
+          matchManager.notifyMatchUpdate(match);
           
           // Also update the match in the database if both players are present
           if (match.whitePlayerId && match.blackPlayerId) {
@@ -302,7 +412,7 @@ serve(async (req) => {
                   blackUsername: match.blackUsername,
                   status: 'active'
                 })
-                .eq('id', matchId);
+                .eq('id', message.matchId);
               
               if (error) throw error;
             } catch (dbError) {
@@ -310,136 +420,206 @@ serve(async (req) => {
             }
           }
           
-          if (callback) callback({ success: true, match });
-        } catch (error) {
-          console.error("Error joining match:", error);
-          if (callback) callback({ success: false, error: "Failed to join match" });
+          socket.send(JSON.stringify({
+            requestId,
+            type: 'joinMatchSuccess',
+            success: true,
+            match
+          }));
         }
-      });
-
-      // Start match
-      socket.on("startMatch", ({ matchId }, callback) => {
-        try {
-          const match = matchManager.getMatch(matchId);
+        
+        // Handle start match
+        else if (type === 'startMatch') {
+          const user = matchManager.getUserBySocketId(socketId);
+          if (!user) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not authenticated'
+            }));
+            return;
+          }
           
+          const match = matchManager.getMatch(message.matchId);
           if (!match) {
-            if (callback) callback({ success: false, error: "Match not found" });
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Match not found'
+            }));
             return;
           }
           
-          if (match.whitePlayerId !== userId && match.blackPlayerId !== userId) {
-            if (callback) callback({ success: false, error: "Not a player in this match" });
+          if (match.whitePlayerId !== user.id && match.blackPlayerId !== user.id) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not a player in this match'
+            }));
             return;
           }
           
-          const startedMatch = matchManager.startMatch(matchId);
-          
+          const startedMatch = matchManager.startMatch(message.matchId);
           if (!startedMatch) {
-            if (callback) callback({ success: false, error: "Failed to start match" });
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Failed to start match'
+            }));
             return;
           }
           
-          // Emit game state to both players
-          socketServer.to(matchId).emit("matchUpdate", startedMatch);
-          socketServer.to(matchId).emit("gameStateUpdate", { 
-            matchId, 
-            gameState: startedMatch.gameState 
-          });
+          // Notify both players
+          matchManager.notifyMatchUpdate(startedMatch);
+          if (startedMatch.gameState) {
+            matchManager.notifyGameStateUpdate(startedMatch.id, startedMatch.gameState);
+          }
           
-          if (callback) callback({ success: true });
-        } catch (error) {
-          console.error("Error starting match:", error);
-          if (callback) callback({ success: false, error: "Failed to start match" });
+          socket.send(JSON.stringify({
+            requestId,
+            type: 'startMatchSuccess',
+            success: true
+          }));
         }
-      });
-
-      // Make move
-      socket.on("makeMove", ({ matchId, move }, callback) => {
-        try {
-          const match = matchManager.getMatch(matchId);
+        
+        // Handle make move
+        else if (type === 'makeMove') {
+          const user = matchManager.getUserBySocketId(socketId);
+          if (!user) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not authenticated'
+            }));
+            return;
+          }
           
+          const match = matchManager.getMatch(message.matchId);
           if (!match) {
-            if (callback) callback({ success: false, error: "Match not found" });
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Match not found'
+            }));
             return;
           }
           
-          if (match.whitePlayerId !== userId && match.blackPlayerId !== userId) {
-            if (callback) callback({ success: false, error: "Not a player in this match" });
+          if (match.whitePlayerId !== user.id && match.blackPlayerId !== user.id) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not a player in this match'
+            }));
             return;
           }
           
-          const updatedMatch = matchManager.makeMove(matchId, userId, move);
-          
+          const updatedMatch = matchManager.makeMove(message.matchId, user.id, message.move);
           if (!updatedMatch) {
-            if (callback) callback({ success: false, error: "Invalid move" });
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Invalid move'
+            }));
             return;
           }
           
-          // Emit updated state to both players
-          socketServer.to(matchId).emit("matchUpdate", updatedMatch);
-          socketServer.to(matchId).emit("gameStateUpdate", { 
-            matchId, 
-            gameState: updatedMatch.gameState 
-          });
+          // Notify both players
+          matchManager.notifyMatchUpdate(updatedMatch);
+          if (updatedMatch.gameState) {
+            matchManager.notifyGameStateUpdate(updatedMatch.id, updatedMatch.gameState);
+          }
           
           // If game ended, update the database
           if (updatedMatch.status === 'completed') {
             try {
-              supabase
+              const { error } = await supabase
                 .from('matches')
                 .update({
                   status: 'completed',
                   winner: updatedMatch.winner
                 })
-                .eq('id', matchId)
-                .then(({ error }) => {
-                  if (error) console.error("Database update error:", error);
-                });
+                .eq('id', message.matchId);
+              
+              if (error) console.error("Database update error:", error);
             } catch (dbError) {
               console.error("Database update error:", dbError);
             }
           }
           
-          if (callback) callback({ success: true });
-        } catch (error) {
-          console.error("Error making move:", error);
-          if (callback) callback({ success: false, error: "Failed to make move" });
+          socket.send(JSON.stringify({
+            requestId,
+            type: 'makeMoveSuccess',
+            success: true
+          }));
         }
-      });
-
-      // Get available matches
-      socket.on("getAvailableMatches", (callback) => {
-        try {
+        
+        // Handle get available matches
+        else if (type === 'getAvailableMatches') {
+          const user = matchManager.getUserBySocketId(socketId);
+          if (!user) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not authenticated'
+            }));
+            return;
+          }
+          
           const matches = matchManager.getAvailableMatches();
-          if (callback) callback({ success: true, matches });
-        } catch (error) {
-          console.error("Error getting available matches:", error);
-          if (callback) callback({ success: false, error: "Failed to get matches" });
+          
+          socket.send(JSON.stringify({
+            requestId,
+            type: 'getAvailableMatchesSuccess',
+            success: true,
+            matches
+          }));
         }
-      });
-
-      // Get user matches
-      socket.on("getUserMatches", (callback) => {
-        try {
-          const matches = matchManager.getUserMatches(userId);
-          if (callback) callback({ success: true, matches });
-        } catch (error) {
-          console.error("Error getting user matches:", error);
-          if (callback) callback({ success: false, error: "Failed to get matches" });
+        
+        // Handle get user matches
+        else if (type === 'getUserMatches') {
+          const user = matchManager.getUserBySocketId(socketId);
+          if (!user) {
+            socket.send(JSON.stringify({
+              requestId,
+              type: 'error',
+              error: 'Not authenticated'
+            }));
+            return;
+          }
+          
+          const matches = matchManager.getUserMatches(user.id);
+          
+          socket.send(JSON.stringify({
+            requestId,
+            type: 'getUserMatchesSuccess',
+            success: true,
+            matches
+          }));
         }
-      });
-
-      // Disconnect handling
-      socket.on("disconnect", () => {
-        console.log(`User disconnected: ${username} (${userId})`);
-        matchManager.removeUser(userId);
-      });
-    });
-
-    const response = await socketServer.attachToServer(req);
+      } catch (error) {
+        console.error("Error processing message:", error);
+        socket.send(JSON.stringify({
+          type: 'error',
+          error: 'Invalid message format'
+        }));
+      }
+    };
+    
+    socket.onclose = () => {
+      console.log(`WebSocket connection closed: ${socketId}`);
+      matchManager.removeUser(socketId);
+    };
+    
+    socket.onerror = (error) => {
+      console.error(`WebSocket error: ${error}`);
+    };
+    
     return response;
   } catch (error) {
-    console.error("Socket server error:", error);
-    return new Response("Internal Server Error", { status: 500 });
+    console.error("WebSocket server error:", error);
+    return new Response("Internal Server Error", { 
+      status: 500,
+      headers: corsHeaders
+    });
   }
 });

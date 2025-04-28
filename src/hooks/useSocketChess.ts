@@ -44,7 +44,7 @@ export function useSocketChess() {
       
       return success;
     } catch (error) {
-      console.error("Socket connection error:", error);
+      console.error("WebSocket connection error:", error);
       // Only show toast if we've exceeded retry attempts
       if (connectionAttempts >= 2) {
         toast({
@@ -71,6 +71,24 @@ export function useSocketChess() {
     setGameState(null);
     setConnectionAttempts(0);
   }, []);
+
+  // Monitor connection status
+  useEffect(() => {
+    const checkConnection = () => {
+      const isConnected = socketChessService.isConnected();
+      if (connected !== isConnected) {
+        setConnected(isConnected);
+      }
+    };
+    
+    // Check immediately
+    checkConnection();
+    
+    // Set up interval to check connection status
+    const intervalId = setInterval(checkConnection, 5000);
+    
+    return () => clearInterval(intervalId);
+  }, [connected]);
 
   useEffect(() => {
     // Auto-connect when a user is available, but limit connection attempts

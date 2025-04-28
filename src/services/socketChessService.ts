@@ -1,28 +1,30 @@
 
-import { io, Socket } from 'socket.io-client';
+// WebSocket chess service
 import { Match } from '@/types';
 
-// We'll set a default server URL and fallback to local if not available
-const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_CHESS_SERVER_URL || 'http://localhost:3001';
+// Server URL with fallbacks
+const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_CHESS_SERVER_URL || 'wss://fmnopirdysucmxwgyezo.supabase.co/functions/v1/socket-chess-server';
+const FALLBACK_SERVER_URL = 'ws://localhost:8080';
 
-// Constants for reconnection
+// Connection settings
 const MAX_RECONNECTION_ATTEMPTS = 3;
-const RECONNECTION_DELAY = 2000; // 2 seconds
 
 class SocketChessService {
-  private socket: Socket | null = null;
+  private socket: WebSocket | null = null;
   private userId: string | null = null;
   private username: string | null = null;
   private matchListeners: Map<string, Array<(match: Match) => void>> = new Map();
   private gameStateListeners: Map<string, Array<(gameState: any) => void>> = new Map();
   private connectionAttempts = 0;
   private isReconnecting = false;
+  private serverUrls = [SOCKET_SERVER_URL, FALLBACK_SERVER_URL];
+  private currentUrlIndex = 0;
   
-  // Initialize the socket connection with retry logic
+  // Initialize the WebSocket connection with retry logic
   connect(userId: string, username: string): Promise<boolean> {
     return new Promise((resolve) => {
-      if (this.socket && this.socket.connected) {
-        console.log('Socket already connected');
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        console.log('WebSocket already connected');
         resolve(true);
         return;
       }
@@ -31,73 +33,126 @@ class SocketChessService {
       this.username = username;
       this.connectionAttempts += 1;
       
-      console.log(`Connecting to socket server at ${SOCKET_SERVER_URL} (attempt ${this.connectionAttempts})`);
+      // Try the current server URL
+      const currentUrl = this.serverUrls[this.currentUrlIndex];
+      console.log(`Connecting to WebSocket server at ${currentUrl} (attempt ${this.connectionAttempts})`);
       
       // Clean up any existing socket
       if (this.socket) {
-        this.socket.removeAllListeners();
-        this.socket.disconnect();
+        this.socket.onopen = null;
+        this.socket.onclose = null;
+        this.socket.onerror = null;
+        this.socket.onmessage = null;
+        this.socket.close();
         this.socket = null;
       }
       
-      // Create new socket connection with improved options
-      this.socket = io(SOCKET_SERVER_URL, {
-        auth: {
-          userId,
-          username
-        },
-        reconnection: true,
-        reconnectionAttempts: MAX_RECONNECTION_ATTEMPTS,
-        reconnectionDelay: RECONNECTION_DELAY,
-        timeout: 10000, // 10 seconds timeout
-        transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
-      });
-      
-      this.socket.on('connect', () => {
-        console.log('Socket connected successfully');
-        this.connectionAttempts = 0; // Reset counter on successful connection
-        this.isReconnecting = false;
-        resolve(true);
-      });
-      
-      this.socket.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
+      try {
+        // Create a new WebSocket connection
+        this.socket = new WebSocket(currentUrl);
         
-        if (this.connectionAttempts < MAX_RECONNECTION_ATTEMPTS && !this.isReconnecting) {
-          console.log(`Retrying connection (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
-          // Will automatically retry due to reconnection options
-        } else {
-          resolve(false);
-        }
-      });
-      
-      this.socket.on('matchUpdate', (matchData: Match) => {
-        console.log('Received match update:', matchData);
-        const listeners = this.matchListeners.get(matchData.id) || [];
-        listeners.forEach(listener => listener(matchData));
-      });
-      
-      this.socket.on('gameStateUpdate', (data: { matchId: string, gameState: any }) => {
-        console.log(`Received game state update for match ${data.matchId}:`, data.gameState);
-        const listeners = this.gameStateListeners.get(data.matchId) || [];
-        listeners.forEach(listener => listener(data.gameState));
-      });
-      
-      this.socket.on('disconnect', (reason) => {
-        console.log('Socket disconnected:', reason);
-      });
+        this.socket.onopen = () => {
+          console.log('✅ WebSocket connected successfully');
+          this.connectionAttempts = 0; // Reset counter on successful connection
+          this.isReconnecting = false;
+          
+          // Send auth information
+          this.send({
+            type: 'auth',
+            userId,
+            username
+          });
+          
+          resolve(true);
+        };
+        
+        this.socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('📩 Message from server:', data);
+            
+            if (data.type === 'matchUpdate' && data.match) {
+              const match = data.match;
+              const listeners = this.matchListeners.get(match.id) || [];
+              listeners.forEach(listener => listener(match));
+            }
+            
+            if (data.type === 'gameStateUpdate' && data.matchId) {
+              const listeners = this.gameStateListeners.get(data.matchId) || [];
+              listeners.forEach(listener => listener(data.gameState));
+            }
+          } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+          }
+        };
+        
+        this.socket.onerror = (error) => {
+          console.error('❌ WebSocket error:', error);
+          
+          // If we haven't tried all server URLs, try the next one
+          if (this.currentUrlIndex < this.serverUrls.length - 1) {
+            console.log(`Trying next server URL...`);
+            this.currentUrlIndex++;
+            this.connect(userId, username).then(resolve);
+          } else {
+            // Reset to the first URL for next attempt
+            this.currentUrlIndex = 0;
+            
+            if (this.connectionAttempts < MAX_RECONNECTION_ATTEMPTS && !this.isReconnecting) {
+              console.log(`Retrying connection (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
+              setTimeout(() => {
+                this.connect(userId, username).then(resolve);
+              }, 2000); // Wait 2 seconds before retrying
+            } else {
+              resolve(false);
+            }
+          }
+        };
+        
+        this.socket.onclose = () => {
+          console.log('🔌 Disconnected from WebSocket server');
+        };
+        
+      } catch (error) {
+        console.error('Error creating WebSocket:', error);
+        resolve(false);
+      }
       
       // Set a timeout to prevent hanging on connection attempts
       setTimeout(() => {
-        if (!this.socket?.connected) {
+        if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
           console.log('Connection attempt timed out');
-          resolve(false);
+          
+          // Try the next URL or resolve false
+          if (this.currentUrlIndex < this.serverUrls.length - 1) {
+            this.currentUrlIndex++;
+            this.connect(userId, username).then(resolve);
+          } else {
+            this.currentUrlIndex = 0;
+            resolve(false);
+          }
         }
       }, 10000); // 10 second timeout
     });
   }
   
-  // Try to reconnect with exponential backoff
+  // Private method to send data to the server
+  private send(data: any): boolean {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.error('Cannot send message: WebSocket not connected');
+      return false;
+    }
+    
+    try {
+      this.socket.send(JSON.stringify(data));
+      return true;
+    } catch (error) {
+      console.error('Error sending WebSocket message:', error);
+      return false;
+    }
+  }
+  
+  // Try to reconnect
   async reconnect(): Promise<boolean> {
     if (!this.userId || !this.username) {
       console.error('Cannot reconnect without user credentials');
@@ -110,6 +165,7 @@ class SocketChessService {
     }
     
     this.isReconnecting = true;
+    this.currentUrlIndex = 0; // Reset to first URL when explicitly reconnecting
     
     try {
       return await this.connect(this.userId, this.username);
@@ -120,37 +176,63 @@ class SocketChessService {
   
   disconnect(): void {
     if (this.socket) {
-      this.socket.disconnect();
+      this.socket.close();
       this.socket = null;
       this.userId = null;
       this.username = null;
       this.connectionAttempts = 0;
-      console.log('Socket disconnected');
+      console.log('WebSocket disconnected');
     }
   }
   
   isConnected(): boolean {
-    return this.socket !== null && this.socket.connected;
+    return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
   }
   
-  // Add method to get the socket instance
-  getSocket(): Socket | null {
+  // Get the socket instance
+  getSocket(): WebSocket | null {
     return this.socket;
   }
   
   // Match related methods
   createMatch(matchData: Partial<Match>): Promise<Match> {
     return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.connected) {
-        reject(new Error('Socket not connected'));
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket not connected'));
         return;
       }
       
-      this.socket.emit('createMatch', matchData, (response: { success: boolean, match?: Match, error?: string }) => {
-        if (response.success && response.match) {
-          resolve(response.match);
-        } else {
-          reject(new Error(response.error || 'Failed to create match'));
+      const requestId = this.generateRequestId();
+      
+      // Set up a one-time listener for the response
+      const messageHandler = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.requestId === requestId) {
+            // Remove the listener once we get the response
+            this.socket?.removeEventListener('message', messageHandler);
+            
+            if (data.success && data.match) {
+              resolve(data.match);
+            } else {
+              reject(new Error(data.error || 'Failed to create match'));
+            }
+          }
+        } catch (error) {
+          console.error('Error processing create match response:', error);
+        }
+      };
+      
+      this.socket.addEventListener('message', messageHandler);
+      
+      // Send the create match request
+      this.send({
+        type: 'createMatch',
+        requestId,
+        matchData: {
+          ...matchData,
+          whitePlayerId: this.userId,
+          whiteUsername: this.username,
         }
       });
     });
@@ -158,53 +240,125 @@ class SocketChessService {
   
   joinMatch(matchId: string): Promise<Match> {
     return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.connected) {
-        reject(new Error('Socket not connected'));
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket not connected'));
         return;
       }
       
-      this.socket.emit('joinMatch', { matchId }, (response: { success: boolean, match?: Match, error?: string }) => {
-        if (response.success && response.match) {
-          resolve(response.match);
-        } else {
-          reject(new Error(response.error || 'Failed to join match'));
+      const requestId = this.generateRequestId();
+      
+      // Set up a one-time listener for the response
+      const messageHandler = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.requestId === requestId) {
+            // Remove the listener once we get the response
+            this.socket?.removeEventListener('message', messageHandler);
+            
+            if (data.success && data.match) {
+              resolve(data.match);
+            } else {
+              reject(new Error(data.error || 'Failed to join match'));
+            }
+          }
+        } catch (error) {
+          console.error('Error processing join match response:', error);
         }
+      };
+      
+      this.socket.addEventListener('message', messageHandler);
+      
+      // Send the join match request
+      this.send({
+        type: 'joinMatch',
+        requestId,
+        matchId
       });
     });
   }
   
   startMatch(matchId: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.connected) {
-        reject(new Error('Socket not connected'));
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket not connected'));
         return;
       }
       
-      this.socket.emit('startMatch', { matchId }, (response: { success: boolean, error?: string }) => {
-        if (response.success) {
-          resolve(true);
-        } else {
-          reject(new Error(response.error || 'Failed to start match'));
+      const requestId = this.generateRequestId();
+      
+      // Set up a one-time listener for the response
+      const messageHandler = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.requestId === requestId) {
+            // Remove the listener once we get the response
+            this.socket?.removeEventListener('message', messageHandler);
+            
+            if (data.success) {
+              resolve(true);
+            } else {
+              reject(new Error(data.error || 'Failed to start match'));
+            }
+          }
+        } catch (error) {
+          console.error('Error processing start match response:', error);
         }
+      };
+      
+      this.socket.addEventListener('message', messageHandler);
+      
+      // Send the start match request
+      this.send({
+        type: 'startMatch',
+        requestId,
+        matchId
       });
     });
   }
   
   makeMove(matchId: string, move: { from: string, to: string }): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.connected) {
-        reject(new Error('Socket not connected'));
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        reject(new Error('WebSocket not connected'));
         return;
       }
       
-      this.socket.emit('makeMove', { matchId, move }, (response: { success: boolean, error?: string }) => {
-        if (response.success) {
-          resolve(true);
-        } else {
-          reject(new Error(response.error || 'Failed to make move'));
+      const requestId = this.generateRequestId();
+      
+      // Set up a one-time listener for the response
+      const messageHandler = (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.requestId === requestId) {
+            // Remove the listener once we get the response
+            this.socket?.removeEventListener('message', messageHandler);
+            
+            if (data.success) {
+              resolve(true);
+            } else {
+              reject(new Error(data.error || 'Failed to make move'));
+            }
+          }
+        } catch (error) {
+          console.error('Error processing make move response:', error);
         }
+      };
+      
+      this.socket.addEventListener('message', messageHandler);
+      
+      // Send the make move request
+      this.send({
+        type: 'makeMove',
+        requestId,
+        matchId,
+        move
       });
     });
+  }
+  
+  // Helper method to generate unique request IDs
+  private generateRequestId(): string {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   }
   
   // Listeners
