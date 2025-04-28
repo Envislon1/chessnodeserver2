@@ -39,7 +39,7 @@ export function ChessSocketStatus() {
   return (
     <div className="flex items-center">
       <Button 
-        variant="ghost" 
+        variant={connected ? "ghost" : "outline"} 
         size="sm"
         className={connected ? "text-green-500" : "text-red-500"}
         onClick={handleReconnect}
