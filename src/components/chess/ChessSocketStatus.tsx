@@ -9,14 +9,12 @@ export function ChessSocketStatus() {
   const { connected, connecting, retry } = useSocketChess();
   const { toast } = useToast();
   const [reconnecting, setReconnecting] = useState(false);
-  const serverUrl = import.meta.env.VITE_SOCKET_CHESS_SERVER_URL;
-  const isLocalServer = serverUrl.includes('localhost');
 
   const handleReconnect = async () => {
     setReconnecting(true);
     toast({
       title: "Reconnecting",
-      description: `Attempting to connect to the ${isLocalServer ? 'local' : ''} chess server...`
+      description: "Attempting to connect to the chess server..."
     });
     
     try {
@@ -24,12 +22,12 @@ export function ChessSocketStatus() {
       if (success) {
         toast({
           title: "Connected",
-          description: `Successfully connected to the ${isLocalServer ? 'local' : ''} chess server`
+          description: "Successfully connected to the chess server"
         });
       } else {
         toast({
           title: "Connection Failed",
-          description: `Could not connect to the ${isLocalServer ? 'local' : ''} chess server. Please try again.`,
+          description: "Could not connect to the chess server. Please try again.",
           variant: "destructive"
         });
       }
@@ -58,8 +56,8 @@ export function ChessSocketStatus() {
           {connecting || reconnecting 
             ? "Connecting..." 
             : connected 
-              ? `${isLocalServer ? 'Local ' : ''}Chess Server Connected` 
-              : `${isLocalServer ? 'Local ' : ''}Chess Server Offline`}
+              ? "Chess Server Connected" 
+              : "Chess Server Offline"}
         </span>
       </Button>
     </div>

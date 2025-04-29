@@ -9,14 +9,12 @@ export function ConnectionStatus() {
   const { connected, connecting, retry } = useSocketChess();
   const { toast } = useToast();
   const [reconnecting, setReconnecting] = useState(false);
-  const serverUrl = import.meta.env.VITE_SOCKET_CHESS_SERVER_URL;
-  const isLocalServer = serverUrl.includes('localhost');
 
   const handleConnect = async () => {
     setReconnecting(true);
     toast({
       title: "Connecting...",
-      description: `Attempting to connect to the ${isLocalServer ? 'local' : ''} chess server`
+      description: "Attempting to connect to the chess server"
     });
     
     try {
@@ -24,12 +22,12 @@ export function ConnectionStatus() {
       if (success) {
         toast({
           title: "Connected",
-          description: `Successfully connected to the ${isLocalServer ? 'local' : ''} chess server`
+          description: "Successfully connected to the chess server"
         });
       } else {
         toast({
           title: "Connection Failed",
-          description: `Could not connect to the ${isLocalServer ? 'local' : ''} chess server. Please try again.`,
+          description: "Could not connect to the chess server. Please try again.",
           variant: "destructive"
         });
       }
@@ -52,10 +50,7 @@ export function ConnectionStatus() {
             <WifiOff className="h-4 w-4 mr-2 text-yellow-500" />
           )}
           <span className="text-sm text-yellow-500">
-            {connecting || reconnecting ? 
-              `Connecting to ${isLocalServer ? 'local' : ''} chess server...` : 
-              `Not connected to the ${isLocalServer ? 'local' : ''} chess server`
-            }
+            {connecting || reconnecting ? "Connecting to chess server..." : "Not connected to the chess server"}
           </span>
         </div>
         {!connecting && !reconnecting && (
