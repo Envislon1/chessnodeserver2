@@ -9,12 +9,13 @@ export function ChessSocketStatus() {
   const { connected, connecting, retry } = useSocketChess();
   const { toast } = useToast();
   const [reconnecting, setReconnecting] = useState(false);
+  const serverUrl = import.meta.env.VITE_SOCKET_CHESS_SERVER_URL;
 
   const handleReconnect = async () => {
     setReconnecting(true);
     toast({
       title: "Reconnecting",
-      description: "Attempting to connect to the chess server..."
+      description: "Attempting to connect to the Supabase Edge Function chess server..."
     });
     
     try {
@@ -27,7 +28,7 @@ export function ChessSocketStatus() {
       } else {
         toast({
           title: "Connection Failed",
-          description: "Could not connect to the chess server. Please try again.",
+          description: "Could not connect to the Supabase chess server. Please try again.",
           variant: "destructive"
         });
       }
@@ -54,10 +55,10 @@ export function ChessSocketStatus() {
         )}
         <span className="ml-2 text-xs">
           {connecting || reconnecting 
-            ? "Connecting..." 
+            ? "Connecting to Supabase..." 
             : connected 
-              ? "Chess Server Connected" 
-              : "Chess Server Offline"}
+              ? "Supabase Chess Server Connected" 
+              : "Supabase Chess Server Offline"}
         </span>
       </Button>
     </div>
