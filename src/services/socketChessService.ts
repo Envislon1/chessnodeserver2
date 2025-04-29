@@ -2,12 +2,12 @@
 // WebSocket chess service
 import { Match } from '@/types';
 
-// Server URL from environment variable
+// Server URL from environment variable - use the Edge Function URL
 const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_CHESS_SERVER_URL || 'wss://fmnopirdysucmxwgyezo.supabase.co/functions/v1/socket-chess-server';
 
 // Connection settings
 const MAX_RECONNECTION_ATTEMPTS = 3;
-const CONNECTION_TIMEOUT = 15000; // 15 seconds - increased for Edge Function connections
+const CONNECTION_TIMEOUT = 10000; // 10 seconds
 
 class SocketChessService {
   private socket: WebSocket | null = null;
@@ -22,7 +22,7 @@ class SocketChessService {
   connect(userId: string, username: string): Promise<boolean> {
     return new Promise((resolve) => {
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-        console.log('WebSocket already connected to Supabase Edge Function');
+        console.log('WebSocket already connected to Edge Function');
         resolve(true);
         return;
       }
@@ -31,7 +31,7 @@ class SocketChessService {
       this.username = username;
       this.connectionAttempts += 1;
       
-      console.log(`Connecting to Supabase Edge Function at ${SOCKET_SERVER_URL} (attempt ${this.connectionAttempts})`);
+      console.log(`Connecting to Edge Function at ${SOCKET_SERVER_URL} (attempt ${this.connectionAttempts})`);
       
       // Clean up any existing socket
       if (this.socket) {
@@ -44,11 +44,11 @@ class SocketChessService {
       }
       
       try {
-        // Create a new WebSocket connection
+        // Create a new WebSocket connection to the Edge Function
         this.socket = new WebSocket(SOCKET_SERVER_URL);
         
         this.socket.onopen = () => {
-          console.log('✅ WebSocket connected successfully to Supabase Edge Function:', SOCKET_SERVER_URL);
+          console.log('✅ WebSocket connected successfully to Edge Function:', SOCKET_SERVER_URL);
           this.connectionAttempts = 0; // Reset counter on successful connection
           this.isReconnecting = false;
           
@@ -65,7 +65,7 @@ class SocketChessService {
         this.socket.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log('📩 Message from Supabase Edge Function:', data);
+            console.log('📩 Message from Edge Function:', data);
             
             if (data.type === 'matchUpdate' && data.match) {
               const match = data.match;
@@ -83,9 +83,9 @@ class SocketChessService {
         };
         
         this.socket.onerror = (error) => {
-          console.error('❌ Supabase Edge Function WebSocket error:', error);
-          if (this.connectionAttempts < MAX_RECONNECTION_ATTEMPTS && !this.isReconnecting) {
-            console.log(`Retrying connection to Supabase Edge Function (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
+          console.error('❌ Edge Function WebSocket error:', error);
+          if (!this.isReconnecting && this.connectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
+            console.log(`Retrying connection to Edge Function (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
             setTimeout(() => {
               this.connect(userId, username).then(resolve);
             }, 2000); // Wait 2 seconds before retrying
@@ -95,18 +95,18 @@ class SocketChessService {
         };
         
         this.socket.onclose = () => {
-          console.log('🔌 Disconnected from Supabase Edge Function WebSocket server');
+          console.log('🔌 Disconnected from Edge Function WebSocket server');
         };
         
       } catch (error) {
-        console.error('Error creating WebSocket connection to Supabase Edge Function:', error);
+        console.error('Error creating WebSocket connection to Edge Function:', error);
         resolve(false);
       }
       
       // Set a timeout to prevent hanging on connection attempts
       setTimeout(() => {
         if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
-          console.log('Connection attempt to Supabase Edge Function timed out');
+          console.log('Connection attempt to Edge Function timed out');
           resolve(false);
         }
       }, CONNECTION_TIMEOUT);

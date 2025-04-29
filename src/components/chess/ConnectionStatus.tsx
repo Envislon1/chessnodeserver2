@@ -15,7 +15,7 @@ export function ConnectionStatus() {
     setReconnecting(true);
     toast({
       title: "Connecting...",
-      description: `Attempting to connect to the Supabase chess server at ${serverUrl}`
+      description: `Attempting to connect to the Edge Function at ${serverUrl}`
     });
     
     try {
@@ -23,12 +23,12 @@ export function ConnectionStatus() {
       if (success) {
         toast({
           title: "Connected",
-          description: "Successfully connected to the Supabase chess server"
+          description: "Successfully connected to the Supabase Edge Function"
         });
       } else {
         toast({
           title: "Connection Failed",
-          description: "Could not connect to the Supabase chess server. Please check that the Edge Function is deployed.",
+          description: "Could not connect to the Supabase Edge Function. Please verify it's properly deployed.",
           variant: "destructive"
         });
       }

@@ -28,7 +28,7 @@ export function ChessSocketStatus() {
       } else {
         toast({
           title: "Connection Failed",
-          description: "Could not connect to the Supabase chess server. Please try again.",
+          description: "Could not connect to the Supabase Edge Function. Please check if it's properly deployed.",
           variant: "destructive"
         });
       }
@@ -55,10 +55,10 @@ export function ChessSocketStatus() {
         )}
         <span className="ml-2 text-xs">
           {connecting || reconnecting 
-            ? "Connecting to Supabase..." 
+            ? "Connecting to Edge Function..." 
             : connected 
-              ? "Supabase Chess Server Connected" 
-              : "Supabase Chess Server Offline"}
+              ? "Edge Function Connected" 
+              : "Edge Function Offline"}
         </span>
       </Button>
     </div>
