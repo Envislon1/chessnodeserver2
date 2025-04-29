@@ -1,4 +1,3 @@
-
 // WebSocket chess service
 import { Match } from '@/types';
 
@@ -22,7 +21,7 @@ class SocketChessService {
   connect(userId: string, username: string): Promise<boolean> {
     return new Promise((resolve) => {
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-        console.log('WebSocket already connected to Edge Function');
+        console.log('WebSocket already connected');
         resolve(true);
         return;
       }
@@ -44,11 +43,11 @@ class SocketChessService {
       }
       
       try {
-        // Create a new WebSocket connection to the Edge Function
+        // Create a new WebSocket connection
         this.socket = new WebSocket(SOCKET_SERVER_URL);
         
         this.socket.onopen = () => {
-          console.log('✅ WebSocket connected successfully to Edge Function:', SOCKET_SERVER_URL);
+          console.log('✅ WebSocket connected successfully:', SOCKET_SERVER_URL);
           this.connectionAttempts = 0; // Reset counter on successful connection
           this.isReconnecting = false;
           
@@ -65,7 +64,7 @@ class SocketChessService {
         this.socket.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log('📩 Message from Edge Function:', data);
+            console.log('📩 Message received:', data);
             
             if (data.type === 'matchUpdate' && data.match) {
               const match = data.match;
@@ -83,9 +82,9 @@ class SocketChessService {
         };
         
         this.socket.onerror = (error) => {
-          console.error('❌ Edge Function WebSocket error:', error);
+          console.error('❌ WebSocket error:', error);
           if (!this.isReconnecting && this.connectionAttempts < MAX_RECONNECTION_ATTEMPTS) {
-            console.log(`Retrying connection to Edge Function (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
+            console.log(`Retrying connection (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
             setTimeout(() => {
               this.connect(userId, username).then(resolve);
             }, 2000); // Wait 2 seconds before retrying
@@ -94,19 +93,19 @@ class SocketChessService {
           }
         };
         
-        this.socket.onclose = () => {
-          console.log('🔌 Disconnected from Edge Function WebSocket server');
+        this.socket.onclose = (event) => {
+          console.log(`🔌 WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason || 'No reason provided'}`);
         };
         
       } catch (error) {
-        console.error('Error creating WebSocket connection to Edge Function:', error);
+        console.error('Error creating WebSocket connection:', error);
         resolve(false);
       }
       
       // Set a timeout to prevent hanging on connection attempts
       setTimeout(() => {
         if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
-          console.log('Connection attempt to Edge Function timed out');
+          console.log('Connection attempt timed out');
           resolve(false);
         }
       }, CONNECTION_TIMEOUT);
@@ -142,6 +141,7 @@ class SocketChessService {
     }
     
     this.isReconnecting = true;
+    console.log('Attempting to reconnect to WebSocket server...');
     
     try {
       return await this.connect(this.userId, this.username);
@@ -152,6 +152,7 @@ class SocketChessService {
   
   disconnect(): void {
     if (this.socket) {
+      console.log('Disconnecting WebSocket');
       this.socket.close();
       this.socket = null;
       this.userId = null;
@@ -179,6 +180,7 @@ class SocketChessService {
       }
       
       const requestId = this.generateRequestId();
+      console.log(`Creating match with request ID: ${requestId}`);
       
       // Set up a one-time listener for the response
       const messageHandler = (event: MessageEvent) => {
@@ -189,8 +191,10 @@ class SocketChessService {
             this.socket?.removeEventListener('message', messageHandler);
             
             if (data.success && data.match) {
+              console.log('Match created successfully:', data.match.id);
               resolve(data.match);
             } else {
+              console.error('Failed to create match:', data.error || 'Unknown error');
               reject(new Error(data.error || 'Failed to create match'));
             }
           }
@@ -222,6 +226,7 @@ class SocketChessService {
       }
       
       const requestId = this.generateRequestId();
+      console.log(`Joining match ${matchId} with request ID: ${requestId}`);
       
       // Set up a one-time listener for the response
       const messageHandler = (event: MessageEvent) => {
@@ -232,8 +237,10 @@ class SocketChessService {
             this.socket?.removeEventListener('message', messageHandler);
             
             if (data.success && data.match) {
+              console.log('Joined match successfully:', data.match.id);
               resolve(data.match);
             } else {
+              console.error('Failed to join match:', data.error || 'Unknown error');
               reject(new Error(data.error || 'Failed to join match'));
             }
           }
@@ -261,6 +268,7 @@ class SocketChessService {
       }
       
       const requestId = this.generateRequestId();
+      console.log(`Starting match ${matchId} with request ID: ${requestId}`);
       
       // Set up a one-time listener for the response
       const messageHandler = (event: MessageEvent) => {
@@ -271,8 +279,10 @@ class SocketChessService {
             this.socket?.removeEventListener('message', messageHandler);
             
             if (data.success) {
+              console.log('Match started successfully:', matchId);
               resolve(true);
             } else {
+              console.error('Failed to start match:', data.error || 'Unknown error');
               reject(new Error(data.error || 'Failed to start match'));
             }
           }
@@ -300,6 +310,7 @@ class SocketChessService {
       }
       
       const requestId = this.generateRequestId();
+      console.log(`Making move in match ${matchId} with request ID: ${requestId}`, move);
       
       // Set up a one-time listener for the response
       const messageHandler = (event: MessageEvent) => {
@@ -310,8 +321,10 @@ class SocketChessService {
             this.socket?.removeEventListener('message', messageHandler);
             
             if (data.success) {
+              console.log('Move made successfully in match:', matchId);
               resolve(true);
             } else {
+              console.error('Failed to make move:', data.error || 'Unknown error');
               reject(new Error(data.error || 'Failed to make move'));
             }
           }

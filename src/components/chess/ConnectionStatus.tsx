@@ -15,20 +15,21 @@ export function ConnectionStatus() {
     setReconnecting(true);
     toast({
       title: "Connecting...",
-      description: `Attempting to connect to the Edge Function at ${serverUrl}`
+      description: `Attempting to connect to the chess server at ${serverUrl}`
     });
     
     try {
+      console.log("Manual connection attempt initiated");
       const success = await retry();
       if (success) {
         toast({
           title: "Connected",
-          description: "Successfully connected to the Supabase Edge Function"
+          description: "Successfully connected to the chess server"
         });
       } else {
         toast({
           title: "Connection Failed",
-          description: "Could not connect to the Supabase Edge Function. Please verify it's properly deployed.",
+          description: "Could not connect to the chess server. Please see console for details.",
           variant: "destructive"
         });
       }
@@ -52,8 +53,8 @@ export function ConnectionStatus() {
           )}
           <span className="text-sm text-yellow-500">
             {connecting || reconnecting ? 
-              "Connecting to Supabase Edge Function..." : 
-              "Not connected to the Supabase Edge Function chess server"}
+              "Connecting to chess server..." : 
+              "Not connected to the chess server. You may need to refresh the page."}
           </span>
         </div>
         {!connecting && !reconnecting && (

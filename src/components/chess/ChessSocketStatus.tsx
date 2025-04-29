@@ -15,10 +15,11 @@ export function ChessSocketStatus() {
     setReconnecting(true);
     toast({
       title: "Reconnecting",
-      description: "Attempting to connect to the Supabase Edge Function chess server..."
+      description: "Attempting to connect to the chess server..."
     });
     
     try {
+      console.log("Manual reconnection attempt initiated");
       const success = await retry();
       if (success) {
         toast({
@@ -28,7 +29,7 @@ export function ChessSocketStatus() {
       } else {
         toast({
           title: "Connection Failed",
-          description: "Could not connect to the Supabase Edge Function. Please check if it's properly deployed.",
+          description: "Could not connect to the chess server. Please try again or check console for details.",
           variant: "destructive"
         });
       }
@@ -55,10 +56,10 @@ export function ChessSocketStatus() {
         )}
         <span className="ml-2 text-xs">
           {connecting || reconnecting 
-            ? "Connecting to Edge Function..." 
+            ? "Connecting..." 
             : connected 
-              ? "Edge Function Connected" 
-              : "Edge Function Offline"}
+              ? "Connected" 
+              : "Disconnected"}
         </span>
       </Button>
     </div>

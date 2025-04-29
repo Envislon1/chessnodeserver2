@@ -6,11 +6,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { userService } from "@/services/userService";
 import { useSocketChess } from "@/hooks/useSocketChess";
 import { calculateFee, calculateTotalWithFee } from "@/utils/feeCalculations";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const timeControls = [
@@ -33,6 +33,7 @@ const CreateMatchPage = () => {
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const { createMatch, connected, connecting, retry } = useSocketChess();
   const [connectionError, setConnectionError] = useState<boolean>(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!user) {
@@ -47,12 +48,22 @@ const CreateMatchPage = () => {
     }
   }, [connected]);
 
+  // Attempt to connect when page loads
+  useEffect(() => {
+    if (!connected && !connecting && retryCount === 0) {
+      console.log("Auto-connecting to chess server on CreateMatchPage load");
+      handleRetryConnection();
+    }
+  }, [connected, connecting]); // eslint-disable-line
+
   const handleRetryConnection = async () => {
+    setRetryCount(prev => prev + 1);
     toast({
-      title: "Reconnecting",
+      title: "Connecting",
       description: "Attempting to connect to the chess server..."
     });
     
+    console.log("CreateMatchPage: Manual connection attempt initiated");
     const success = await retry();
     
     if (success) {
@@ -63,6 +74,11 @@ const CreateMatchPage = () => {
       });
     } else {
       setConnectionError(true);
+      toast({
+        title: "Connection Failed",
+        description: "Could not connect to the chess server. Please try again or check your network connection.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -217,9 +233,9 @@ const CreateMatchPage = () => {
                   <AlertDescription className="text-sm text-yellow-500 flex flex-col space-y-2">
                     <p>Could not connect to the chess server. This might be due to:</p>
                     <ul className="list-disc pl-4 space-y-1">
-                      <li>Temporary server issues</li>
+                      <li>Edge Function may not be deployed</li>
                       <li>Network connectivity problems</li>
-                      <li>Your browser's security settings</li>
+                      <li>Server may be temporarily unavailable</li>
                     </ul>
                     <Button
                       variant="outline"
@@ -233,7 +249,10 @@ const CreateMatchPage = () => {
                           Connecting...
                         </span>
                       ) : (
-                        "Retry Connection"
+                        <span className="flex items-center">
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry Connection
+                        </span>
                       )}
                     </Button>
                   </AlertDescription>
