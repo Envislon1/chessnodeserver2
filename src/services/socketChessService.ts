@@ -1,13 +1,12 @@
-
 // WebSocket chess service
 import { Match } from '@/types';
 
-// Server URL with fallbacks
+// Server URL from environment variable
 const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_CHESS_SERVER_URL || 'wss://fmnopirdysucmxwgyezo.supabase.co/functions/v1/socket-chess-server';
-const FALLBACK_SERVER_URL = 'ws://localhost:8080';
 
 // Connection settings
 const MAX_RECONNECTION_ATTEMPTS = 3;
+const CONNECTION_TIMEOUT = 10000; // 10 seconds
 
 class SocketChessService {
   private socket: WebSocket | null = null;
@@ -17,10 +16,8 @@ class SocketChessService {
   private gameStateListeners: Map<string, Array<(gameState: any) => void>> = new Map();
   private connectionAttempts = 0;
   private isReconnecting = false;
-  private serverUrls = [SOCKET_SERVER_URL, FALLBACK_SERVER_URL];
-  private currentUrlIndex = 0;
   
-  // Initialize the WebSocket connection with retry logic
+  // Initialize the WebSocket connection
   connect(userId: string, username: string): Promise<boolean> {
     return new Promise((resolve) => {
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -33,9 +30,7 @@ class SocketChessService {
       this.username = username;
       this.connectionAttempts += 1;
       
-      // Try the current server URL
-      const currentUrl = this.serverUrls[this.currentUrlIndex];
-      console.log(`Connecting to WebSocket server at ${currentUrl} (attempt ${this.connectionAttempts})`);
+      console.log(`Connecting to WebSocket server at ${SOCKET_SERVER_URL} (attempt ${this.connectionAttempts})`);
       
       // Clean up any existing socket
       if (this.socket) {
@@ -49,10 +44,10 @@ class SocketChessService {
       
       try {
         // Create a new WebSocket connection
-        this.socket = new WebSocket(currentUrl);
+        this.socket = new WebSocket(SOCKET_SERVER_URL);
         
         this.socket.onopen = () => {
-          console.log('✅ WebSocket connected successfully');
+          console.log('✅ WebSocket connected successfully to', SOCKET_SERVER_URL);
           this.connectionAttempts = 0; // Reset counter on successful connection
           this.isReconnecting = false;
           
@@ -88,24 +83,13 @@ class SocketChessService {
         
         this.socket.onerror = (error) => {
           console.error('❌ WebSocket error:', error);
-          
-          // If we haven't tried all server URLs, try the next one
-          if (this.currentUrlIndex < this.serverUrls.length - 1) {
-            console.log(`Trying next server URL...`);
-            this.currentUrlIndex++;
-            this.connect(userId, username).then(resolve);
+          if (this.connectionAttempts < MAX_RECONNECTION_ATTEMPTS && !this.isReconnecting) {
+            console.log(`Retrying connection (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
+            setTimeout(() => {
+              this.connect(userId, username).then(resolve);
+            }, 2000); // Wait 2 seconds before retrying
           } else {
-            // Reset to the first URL for next attempt
-            this.currentUrlIndex = 0;
-            
-            if (this.connectionAttempts < MAX_RECONNECTION_ATTEMPTS && !this.isReconnecting) {
-              console.log(`Retrying connection (${this.connectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})...`);
-              setTimeout(() => {
-                this.connect(userId, username).then(resolve);
-              }, 2000); // Wait 2 seconds before retrying
-            } else {
-              resolve(false);
-            }
+            resolve(false);
           }
         };
         
@@ -122,17 +106,9 @@ class SocketChessService {
       setTimeout(() => {
         if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
           console.log('Connection attempt timed out');
-          
-          // Try the next URL or resolve false
-          if (this.currentUrlIndex < this.serverUrls.length - 1) {
-            this.currentUrlIndex++;
-            this.connect(userId, username).then(resolve);
-          } else {
-            this.currentUrlIndex = 0;
-            resolve(false);
-          }
+          resolve(false);
         }
-      }, 10000); // 10 second timeout
+      }, CONNECTION_TIMEOUT);
     });
   }
   
@@ -165,7 +141,6 @@ class SocketChessService {
     }
     
     this.isReconnecting = true;
-    this.currentUrlIndex = 0; // Reset to first URL when explicitly reconnecting
     
     try {
       return await this.connect(this.userId, this.username);

@@ -1,15 +1,17 @@
 
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { useSocketChess } from '@/hooks/useSocketChess';
 import { Button } from '@/components/ui/button';
-import { Loader2, WifiOff } from 'lucide-react';
+import { Loader2, Wifi, WifiOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function ConnectionStatus() {
   const { connected, connecting, retry } = useSocketChess();
   const { toast } = useToast();
-  
+  const [reconnecting, setReconnecting] = useState(false);
+
   const handleConnect = async () => {
+    setReconnecting(true);
     toast({
       title: "Connecting...",
       description: "Attempting to connect to the chess server"
@@ -31,15 +33,10 @@ export function ConnectionStatus() {
       }
     } catch (error) {
       console.error("Connection error:", error);
+    } finally {
+      setReconnecting(false);
     }
   };
-
-  // Attempt to connect on first load
-  useEffect(() => {
-    if (!connected && !connecting) {
-      retry().catch(console.error);
-    }
-  }, [connected, connecting, retry]);
 
   if (connected) return null;
 
@@ -47,16 +44,16 @@ export function ConnectionStatus() {
     <div className="w-full p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-md mb-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
-          {connecting ? (
+          {connecting || reconnecting ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin text-yellow-500" />
           ) : (
             <WifiOff className="h-4 w-4 mr-2 text-yellow-500" />
           )}
           <span className="text-sm text-yellow-500">
-            {connecting ? "Connecting to chess server..." : "Not connected to the chess server"}
+            {connecting || reconnecting ? "Connecting to chess server..." : "Not connected to the chess server"}
           </span>
         </div>
-        {!connecting && (
+        {!connecting && !reconnecting && (
           <Button variant="outline" size="sm" onClick={handleConnect} className="text-xs">
             Connect
           </Button>
