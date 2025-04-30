@@ -1,17 +1,14 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { AddInverterSystem } from "@/components/inverter/AddInverterSystem";
-import { AddSharedInverter } from "@/components/inverter/AddSharedInverter";
 import { PowerSwitch } from "@/components/inverter/PowerSwitch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SystemSelector } from "./SystemSelector";
 import { SystemInfoCard } from "./SystemInfoCard";
 import { SystemTabs } from "./SystemTabs";
 import type { InverterSystem, InverterSystemParameters } from "./types";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
@@ -180,20 +177,9 @@ const Dashboard = () => {
             )}
           </div>
           <div className="space-y-4">
-            <Tabs defaultValue="add" className="w-full">
-              <TabsList className="w-full grid grid-cols-2 bg-black/40 border-orange-500/20">
-                <TabsTrigger value="add">Add New</TabsTrigger>
-                <TabsTrigger value="shared">Connect Shared</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="add">
-                <AddInverterSystem onSuccess={fetchInverterSystems} />
-              </TabsContent>
-              
-              <TabsContent value="shared">
-                <AddSharedInverter onSuccess={fetchInverterSystems} />
-              </TabsContent>
-            </Tabs>
+            <div className="p-4 bg-black/40 border border-orange-500/20 rounded-lg">
+              <AddInverterSystem onSuccess={fetchInverterSystems} />
+            </div>
             
             {selectedSystemData?.system_id && (
               <div className="p-4 bg-black/40 border border-orange-500/20 rounded-lg">
