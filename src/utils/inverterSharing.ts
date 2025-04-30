@@ -6,6 +6,8 @@ export const findOrCreateSharedInverter = async (systemId: string) => {
   try {
     // Clean the system ID (remove any existing underscores at the start)
     const cleanSystemId = systemId.trim().replace(/^_+/, '');
+    console.log("Looking for system with ID:", cleanSystemId);
+    
     const userId = (await supabase.auth.getSession()).data.session?.user?.id;
 
     if (!userId) {
@@ -15,25 +17,33 @@ export const findOrCreateSharedInverter = async (systemId: string) => {
       };
     }
 
-    // Check if this system exists
+    // Check if this system exists - use ilike for case-insensitive comparison
     const { data: existingSystem, error: lookupError } = await supabase
       .from('inverter_systems')
       .select('*')
-      .eq('system_id', cleanSystemId)
+      .ilike('system_id', cleanSystemId)
       .limit(1)
       .maybeSingle();
+      
+    console.log("Existing system lookup result:", existingSystem);
 
-    if (lookupError) throw lookupError;
+    if (lookupError) {
+      console.error("Lookup error:", lookupError);
+      throw lookupError;
+    }
 
     // Check if user already has this system
     const { data: userSystem, error: userSystemError } = await supabase
       .from('inverter_systems')
       .select('id')
       .eq('user_id', userId)
-      .eq('system_id', cleanSystemId)
+      .ilike('system_id', cleanSystemId)
       .maybeSingle();
 
-    if (userSystemError) throw userSystemError;
+    if (userSystemError) {
+      console.error("User system error:", userSystemError);
+      throw userSystemError;
+    }
 
     if (userSystem) {
       return {
@@ -47,6 +57,8 @@ export const findOrCreateSharedInverter = async (systemId: string) => {
       // Generate Firebase ID with underscore if it doesn't exist
       const firebaseDeviceId = existingSystem.system_id ? `_${existingSystem.system_id}` : null;
       
+      console.log("Creating shared inverter entry with Firebase ID:", firebaseDeviceId);
+      
       const { error: insertError } = await supabase
         .from('inverter_systems')
         .insert({
@@ -59,7 +71,10 @@ export const findOrCreateSharedInverter = async (systemId: string) => {
           shared: true
         });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Insert error:", insertError);
+        throw insertError;
+      }
 
       return {
         success: true,
@@ -67,6 +82,7 @@ export const findOrCreateSharedInverter = async (systemId: string) => {
       };
     } else {
       // System doesn't exist at all
+      console.log("No system found with ID:", cleanSystemId);
       return {
         success: false,
         message: "This system ID doesn't exist. Please check the ID and try again."
