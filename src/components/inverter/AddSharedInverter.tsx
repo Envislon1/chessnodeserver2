@@ -30,6 +30,7 @@ export const AddSharedInverter = ({ onSuccess }: AddSharedInverterProps) => {
     setIsLoading(true);
     
     try {
+      console.log("Connecting to shared inverter with ID:", systemId.trim());
       const result = await findOrCreateSharedInverter(systemId.trim());
       
       if (result.success) {
@@ -47,6 +48,7 @@ export const AddSharedInverter = ({ onSuccess }: AddSharedInverterProps) => {
         });
       }
     } catch (error: any) {
+      console.error("Error connecting to shared inverter:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to connect to shared inverter",

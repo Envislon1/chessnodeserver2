@@ -45,8 +45,7 @@ export const findOrCreateSharedInverter = async (systemId: string) => {
     // If system exists, create a new entry for this user
     if (existingSystem) {
       // Generate Firebase ID with underscore if it doesn't exist
-      // Safely check for firebase_id and default to created one if it doesn't exist
-      const firebaseDeviceId = (existingSystem as any).firebase_id || `_${cleanSystemId}`;
+      const firebaseDeviceId = existingSystem.system_id ? `_${existingSystem.system_id}` : null;
       
       const { error: insertError } = await supabase
         .from('inverter_systems')
