@@ -1,7 +1,6 @@
 import { 
   ChartContainer, 
-  ChartTooltip, 
-  ChartTooltipContent 
+  ChartTooltip 
 } from "@/components/ui/chart";
 import { 
   AreaChart, 
@@ -14,70 +13,63 @@ import {
 } from "recharts";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { format, subMinutes } from "date-fns";
 
-// Generate data for the chart with real current values
-const generateHourlyData = (
+// Generate data for the chart with 24 dots at 10-minute intervals
+const generate10MinuteData = (
   capacity: number, 
   currentPower: number = 0, 
   batteryPercentage: number = 0, 
   energyKWh: number = 0
 ) => {
-  // Changed to display only 4 hours (current hour + 3 hours before)
-  const hoursToShow = 4;
-  const currentHour = new Date().getHours();
-  const currentMinute = new Date().getMinutes();
+  // Display 24 dots (4 hours with 10-minute intervals)
+  const dataPoints = 24;
+  const intervalMinutes = 10;
+  const currentDate = new Date();
   
-  // Create base date object for today
-  const today = new Date();
-  
-  // Get hours spanning 3 hours back from current hour
-  const hours = [];
-  for (let i = hoursToShow - 1; i >= 0; i--) {
-    hours.push(currentHour - i);
-  }
-  
-  return hours.map((hour) => {
-    // Adjust for negative hours (previous day)
-    const adjustedHour = hour < 0 ? hour + 24 : hour;
-    
-    // Create datetime for this hour
-    const dateTime = new Date(today);
-    dateTime.setHours(adjustedHour, 0, 0, 0);
+  // Create data points spanning 4 hours back from current time
+  const dataArray = [];
+  for (let i = dataPoints - 1; i >= 0; i--) {
+    // Calculate the date for this data point (going backward from current time)
+    const pointDate = subMinutes(currentDate, i * intervalMinutes);
     
     // Format time for display
-    const formattedTime = format(dateTime, 'HH:mm');
-    const formattedDateTime = format(dateTime, 'yyyy-MM-dd HH:mm');
+    const formattedTime = format(pointDate, 'HH:mm');
+    const formattedDateTime = format(pointDate, 'yyyy-MM-dd HH:mm');
+    
+    // Get hour and minute for determining power patterns
+    const hour = pointDate.getHours();
+    const minute = pointDate.getMinutes();
     
     // Create a power curve based on time of day
-    const isPeak = adjustedHour >= 18 && adjustedHour <= 21; 
-    const isMorning = adjustedHour >= 6 && adjustedHour <= 9;
+    const isPeak = hour >= 18 && hour <= 21; 
+    const isMorning = hour >= 6 && hour <= 9;
     const baseline = Math.random() * 0.3 * capacity; // 0-30% of capacity as baseline
     
     // Generate simulated battery curve that starts high in morning, drains during day, charges in evening
     let batteryValue;
-    // If we have a real battery percentage for the current hour, use it
-    if (adjustedHour === currentHour) {
-      batteryValue = batteryPercentage;
+    // If we're at the current time point, use real battery percentage if available
+    if (i === 0) {
+      batteryValue = batteryPercentage || (50 + (Math.random() * 10));
     } else {
       // Otherwise simulate battery values based on time of day
-      if (adjustedHour >= 6 && adjustedHour <= 17) {
+      if (hour >= 6 && hour <= 17) {
         // Battery drains during the day (faster during peak hours)
-        batteryValue = 80 - ((adjustedHour - 6) * 3) + (Math.random() * 10);
-      } else if (adjustedHour >= 18 && adjustedHour <= 23) {
+        batteryValue = 80 - ((hour - 6) * 3) - ((minute / 60) * 3) + (Math.random() * 5);
+      } else if (hour >= 18 && hour <= 23) {
         // Charging in evening
-        batteryValue = 40 + ((adjustedHour - 18) * 5) + (Math.random() * 10);
+        batteryValue = 40 + ((hour - 18) * 5) + ((minute / 60) * 5) + (Math.random() * 5);
       } else {
         // Overnight steady or slight charging
-        batteryValue = 70 + (Math.random() * 10);
+        batteryValue = 70 + (Math.random() * 5);
       }
       // Ensure battery percentage stays between 10% and 100%
       batteryValue = Math.min(Math.max(batteryValue, 10), 100);
     }
     
-    // Use the real power value for the current hour
+    // Use the real power value for the current time point
     let powerValue; 
-    if (adjustedHour === currentHour) {
+    if (i === 0) {
       // Use actual current power if available
       powerValue = Math.round(currentPower);
     } else {
@@ -86,14 +78,15 @@ const generateHourlyData = (
         ? Math.round(baseline + (Math.random() * 0.5 * capacity)) // Higher during peak
         : isMorning
           ? Math.round(baseline + (Math.random() * 0.3 * capacity)) // Medium during morning
-          : Math.round(baseline); // Baseline during other times
+          : Math.round(baseline + (Math.random() * 0.2 * capacity)); // Baseline during other times
     }
     
     // Calculate load percentage
     const loadPercentage = capacity > 0 ? Math.min(Math.round((powerValue / capacity) * 100), 100) : 0;
     
-    return {
-      dateTime: dateTime,
+    dataArray.push({
+      dateTime: pointDate,
+      timestamp: pointDate.getTime(),
       hour: formattedTime,
       formattedHour: formattedTime,
       formattedDateTime: formattedDateTime,
@@ -101,8 +94,10 @@ const generateHourlyData = (
       loadPercentage: loadPercentage,
       batteryPercentage: Math.round(batteryValue),
       surgeThreshold: Math.round(capacity)
-    };
-  });
+    });
+  }
+  
+  return dataArray;
 };
 
 interface PowerConsumptionChartProps {
@@ -158,25 +153,24 @@ export const PowerConsumptionChart = ({
     const now = Date.now();
     const timeElapsedSinceLastUpdate = now - lastUpdateTime;
     
-    // Update if dependencies changed OR if it's been 2+ minutes (changed from 10 minutes)
-    if (timeElapsedSinceLastUpdate >= 120000 || data.length === 0) { // 2 minutes (120000ms) or initial load
-      console.log("Refreshing power consumption chart data");
-      setData(generateHourlyData(systemCapacityWatts, realPower, batteryPercentage, energyKWh));
+    // Update if dependencies changed OR if it's been 1+ minutes
+    if (timeElapsedSinceLastUpdate >= 60000 || data.length === 0) { // 1 minute (60000ms) or initial load
+      console.log("Refreshing power consumption chart data with 24 data points");
+      setData(generate10MinuteData(systemCapacityWatts, realPower, batteryPercentage, energyKWh));
       setLastUpdateTime(now);
     }
     
-    // Set up an interval to refresh data every 2 minutes (120000 ms) (changed from 10 minutes)
+    // Set up an interval to refresh data every 1 minute (60000 ms)
     const intervalId = setInterval(() => {
-      console.log("Refreshing power consumption chart data (2 min interval)");
-      setData(generateHourlyData(systemCapacityWatts, realPower, batteryPercentage, energyKWh));
+      console.log("Refreshing power consumption chart data (1 min interval)");
+      setData(generate10MinuteData(systemCapacityWatts, realPower, batteryPercentage, energyKWh));
       setLastUpdateTime(Date.now());
-    }, 120000); // 2 minutes (changed from 10 minutes)
+    }, 60000); // 1 minute to ensure frequent updates
     
     return () => clearInterval(intervalId); // Cleanup on unmount
-  }, [currentPower, systemCapacity, firebaseData]);
+  }, [currentPower, systemCapacity, firebaseData, data.length]);
 
   // Set maxValue to 110% of system capacity for chart upper bound
-  // systemCapacity is in KW, so multiply by 1000 to get watts
   const maxValue = systemCapacity * 1000 * 1.1; 
   
   // The surge threshold is the system capacity itself (in watts)
@@ -316,6 +310,7 @@ export const PowerConsumptionChart = ({
             fillOpacity={1}
             fill="url(#powerGradient)" 
             yAxisId="power"
+            dot={{ r: 2 }}  // Add dots to each data point
           />
           <Area 
             type="monotone" 
@@ -324,6 +319,7 @@ export const PowerConsumptionChart = ({
             fillOpacity={0.7}
             fill="url(#batteryGradient)" 
             yAxisId="percentage"
+            dot={{ r: 2 }}  // Add dots to each data point
           />
         </AreaChart>
       </ChartContainer>

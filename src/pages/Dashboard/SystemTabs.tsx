@@ -3,7 +3,6 @@ import { InverterParameters } from "@/components/inverter/InverterParameters";
 import { LoadControlPanel } from "@/components/inverter/LoadControlPanel";
 import { PowerConsumptionChart } from "@/components/inverter/PowerConsumptionChart";
 import { InverterDataDisplay } from "@/components/inverter/InverterDataDisplay";
-import { DeviceStatusMonitor } from "@/components/inverter/DeviceStatusMonitor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -62,9 +61,8 @@ export const SystemTabs = ({
 
   return (
     <Tabs defaultValue="overview" className="w-full">
-      <TabsList className={`grid ${isMobile ? 'grid-cols-3' : 'grid-cols-3'} bg-black/40 border-orange-500/20`}>
+      <TabsList className="grid grid-cols-2 bg-black/40 border-orange-500/20">
         <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="controls">Controls</TabsTrigger>
         <TabsTrigger value="data">Data</TabsTrigger>
       </TabsList>
       
@@ -81,10 +79,6 @@ export const SystemTabs = ({
           currentPower={power}
           firebaseData={firebaseData}
         />
-      </TabsContent>
-      
-      <TabsContent value="controls" className="space-y-4">
-        <LoadControlPanel inverterId={inverterId} />
       </TabsContent>
       
       <TabsContent value="data" className="space-y-4">
