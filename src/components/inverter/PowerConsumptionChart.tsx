@@ -1,3 +1,4 @@
+
 import { 
   ChartContainer, 
   ChartTooltip 
@@ -123,10 +124,17 @@ export const PowerConsumptionChart = ({
     let batteryPercentage = 0;
     
     if (firebaseData) {
-      // Get power from firebase data, ensuring it's only non-zero when power is 1
-      realPower = firebaseData.power === 1 
-        ? (firebaseData.output_power || firebaseData.real_power || firebaseData.power_output || currentPower) 
-        : 0;
+      // IMPORTANT: Ensure power is always correctly extracted
+      // Only use non-zero power when the device is ON (power = 1)
+      if (firebaseData.power === 1) {
+        realPower = parseFloat(firebaseData.real_power) || 
+                   parseFloat(firebaseData.output_power) || 
+                   parseFloat(firebaseData.power) || 
+                   currentPower;
+      } else {
+        // Device is OFF, no power consumption
+        realPower = 0;
+      }
       
       // Get energy from firebase data in kWh
       energyKWh = firebaseData.energy || 0;
@@ -146,7 +154,9 @@ export const PowerConsumptionChart = ({
       }
 
       console.log("Firebase data for chart:", {
-        power: realPower,
+        powerState: firebaseData.power,
+        rawRealPower: firebaseData.real_power,
+        calculatedRealPower: realPower,
         batteryPercentage: batteryPercentage,
         energy: energyKWh
       });
@@ -316,7 +326,7 @@ export const PowerConsumptionChart = ({
             fillOpacity={1}
             fill="url(#powerGradient)" 
             yAxisId="power"
-            dot={false}  // Remove dots from each data point
+            dot={false}
           />
           <Area 
             type="monotone" 
@@ -325,7 +335,7 @@ export const PowerConsumptionChart = ({
             fillOpacity={0.7}
             fill="url(#batteryGradient)" 
             yAxisId="percentage"
-            dot={false}  // Remove dots from each data point
+            dot={false}
           />
         </AreaChart>
       </ChartContainer>

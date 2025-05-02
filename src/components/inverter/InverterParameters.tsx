@@ -36,9 +36,16 @@ export const InverterParameters = ({
   // Convert system capacity to Watts for comparison with output_power
   const systemCapacityWatts = systemCapacity * 1000;
 
-  // Get the current power value from data
-  // Use real_power as primary source, fall back to output_power
+  // Make sure we use the real power values that are passed in correctly
+  // IMPORTANT: Use real_power as primary source, fall back to output_power
   const currentPower = data.real_power || data.output_power || 0;
+
+  console.log("InverterParameters power data:", {
+    realPower: data.real_power,
+    outputPower: data.output_power,
+    currentPower: currentPower,
+    systemCapacityWatts: systemCapacityWatts
+  });
 
   // Set the surge threshold at 80% of system capacity
   const isPowerSurge = systemCapacityWatts ? currentPower / systemCapacityWatts > 0.8 : false;

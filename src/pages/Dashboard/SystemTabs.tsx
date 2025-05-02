@@ -50,18 +50,24 @@ export const SystemTabs = ({
   
   const isMobile = useIsMobile();
 
-  // Extract power data from Firebase for the chart
-  // Only use power value if the device is actually on (power = 1)
+  // Extract correct power data from Firebase
+  // Important: Use the power value directly from Firebase data
   const power = firebaseData?.power === 1 ? 
-    (firebaseData?.real_power || firebaseData?.output_power || 0) : 0;
+    (firebaseData?.power * parseFloat(firebaseData?.real_power || firebaseData?.power || 0)) : 0;
 
-  // Add nominal voltage to parameters if available from firebase
+  console.log("Power in SystemTabs:", {
+    firebasePower: firebaseData?.power,
+    firebaseRealPower: firebaseData?.real_power,
+    calculatedPower: power
+  });
+
+  // Add nominal voltage and power values to parameters if available from firebase
   const extendedParameters = parameters ? {
     ...parameters,
     nominal_voltage: firebaseData?.nominal_voltage || parameters.nominal_voltage,
-    // Ensure we use the real power values from Firebase
-    real_power: power,
-    output_power: power,
+    // Ensure we use the correct real power values from Firebase
+    real_power: firebaseData?.real_power || 0,
+    output_power: firebaseData?.real_power || 0,
     // Ensure battery percentage is from Firebase
     battery_percentage: firebaseData?.battery_percentage || parameters.battery_percentage
   } : null;
@@ -84,7 +90,7 @@ export const SystemTabs = ({
         )}
         <PowerConsumptionChart 
           systemCapacity={systemCapacity} 
-          currentPower={power}
+          currentPower={firebaseData?.real_power || 0}
           firebaseData={firebaseData}
         />
       </TabsContent>
