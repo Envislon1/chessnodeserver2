@@ -1,4 +1,3 @@
-
 import { 
   ChartContainer, 
   ChartTooltip 
@@ -50,8 +49,8 @@ const generate10MinuteData = (
     // Generate simulated battery curve that starts high in morning, drains during day, charges in evening
     let batteryValue;
     // If we're at the current time point, use real battery percentage if available
-    if (i === 0) {
-      batteryValue = batteryPercentage || (50 + (Math.random() * 10));
+    if (i === 0 && batteryPercentage > 0) {
+      batteryValue = batteryPercentage;
     } else {
       // Otherwise simulate battery values based on time of day
       if (hour >= 6 && hour <= 17) {
@@ -124,7 +123,7 @@ export const PowerConsumptionChart = ({
     let batteryPercentage = 0;
     
     if (firebaseData) {
-      // Get power from firebase data
+      // Get power from firebase data, ensuring it's only non-zero when power is 1
       realPower = firebaseData.power === 1 
         ? (firebaseData.output_power || firebaseData.real_power || firebaseData.power_output || currentPower) 
         : 0;
@@ -132,7 +131,7 @@ export const PowerConsumptionChart = ({
       // Get energy from firebase data in kWh
       energyKWh = firebaseData.energy || 0;
       
-      // Get battery percentage from firebase data
+      // Get battery percentage directly from Firebase if available
       batteryPercentage = firebaseData.battery_percentage || 0;
       
       // If no battery percentage but we have battery voltage and nominal voltage
@@ -145,6 +144,12 @@ export const PowerConsumptionChart = ({
           100
         );
       }
+
+      console.log("Firebase data for chart:", {
+        power: realPower,
+        batteryPercentage: batteryPercentage,
+        energy: energyKWh
+      });
     }
     
     // Calculate system capacity in watts (from KW)

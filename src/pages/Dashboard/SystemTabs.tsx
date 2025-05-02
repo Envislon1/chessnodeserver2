@@ -51,12 +51,19 @@ export const SystemTabs = ({
   const isMobile = useIsMobile();
 
   // Extract power data from Firebase for the chart
-  const power = firebaseData?.power === 1 ? (firebaseData?.output_power || firebaseData?.real_power || 0) : 0;
+  // Only use power value if the device is actually on (power = 1)
+  const power = firebaseData?.power === 1 ? 
+    (firebaseData?.real_power || firebaseData?.output_power || 0) : 0;
 
   // Add nominal voltage to parameters if available from firebase
   const extendedParameters = parameters ? {
     ...parameters,
-    nominal_voltage: firebaseData?.nominal_voltage || parameters.nominal_voltage
+    nominal_voltage: firebaseData?.nominal_voltage || parameters.nominal_voltage,
+    // Ensure we use the real power values from Firebase
+    real_power: power,
+    output_power: power,
+    // Ensure battery percentage is from Firebase
+    battery_percentage: firebaseData?.battery_percentage || parameters.battery_percentage
   } : null;
 
   return (
