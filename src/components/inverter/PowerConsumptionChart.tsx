@@ -119,28 +119,28 @@ export const PowerConsumptionChart = ({
   // Update chart data at intervals or when dependencies change
   useEffect(() => {
     // Extract power and battery data from firebaseData if available
-    let realPower = currentPower;
+    let realPower = 0;
     let energyKWh = 0;
     let batteryPercentage = 0;
     
     if (firebaseData) {
-      // IMPORTANT: Ensure power is always correctly extracted
-      // Only use non-zero power when the device is ON (power = 1)
+      // FIXED: Get the actual power value from Firebase
+      // The device is ON (power = 1) and we have real_power data
       if (firebaseData.power === 1) {
+        // Parse real_power as a number to ensure it's treated as a number
         realPower = parseFloat(firebaseData.real_power) || 
-                   parseFloat(firebaseData.output_power) || 
                    parseFloat(firebaseData.power) || 
-                   currentPower;
+                   currentPower || 0;
       } else {
         // Device is OFF, no power consumption
         realPower = 0;
       }
       
       // Get energy from firebase data in kWh
-      energyKWh = firebaseData.energy || 0;
+      energyKWh = parseFloat(firebaseData.energy || '0');
       
-      // Get battery percentage directly from Firebase if available
-      batteryPercentage = firebaseData.battery_percentage || 0;
+      // FIXED: Get battery percentage directly from Firebase using parseFloat to ensure numeric value
+      batteryPercentage = parseFloat(firebaseData.battery_percentage || '0');
       
       // If no battery percentage but we have battery voltage and nominal voltage
       if (!batteryPercentage && firebaseData.battery_voltage && firebaseData.nominal_voltage) {
@@ -153,12 +153,14 @@ export const PowerConsumptionChart = ({
         );
       }
 
-      console.log("Firebase data for chart:", {
+      console.log("Firebase data for chart (FIXED):", {
         powerState: firebaseData.power,
         rawRealPower: firebaseData.real_power,
+        parsedRealPower: parseFloat(firebaseData.real_power || '0'),
         calculatedRealPower: realPower,
         batteryPercentage: batteryPercentage,
-        energy: energyKWh
+        energy: energyKWh,
+        rawFirebaseData: firebaseData
       });
     }
     
@@ -171,7 +173,9 @@ export const PowerConsumptionChart = ({
     
     // Update if dependencies changed OR if it's been 1+ minutes
     if (timeElapsedSinceLastUpdate >= 60000 || data.length === 0) { // 1 minute (60000ms) or initial load
-      console.log("Refreshing power consumption chart data with 24 data points");
+      console.log("Refreshing power consumption chart data with 24 data points", {
+        realPower, batteryPercentage, systemCapacityWatts
+      });
       setData(generate10MinuteData(systemCapacityWatts, realPower, batteryPercentage, energyKWh));
       setLastUpdateTime(now);
     }

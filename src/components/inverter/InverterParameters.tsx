@@ -36,11 +36,11 @@ export const InverterParameters = ({
   // Convert system capacity to Watts for comparison with output_power
   const systemCapacityWatts = systemCapacity * 1000;
 
-  // Make sure we use the real power values that are passed in correctly
-  // IMPORTANT: Use real_power as primary source, fall back to output_power
-  const currentPower = data.real_power || data.output_power || 0;
+  // FIXED: Get the actual power from data
+  // Only use non-zero power values to correctly calculate load
+  const currentPower = parseFloat(data.real_power?.toString() || data.output_power?.toString() || '0');
 
-  console.log("InverterParameters power data:", {
+  console.log("InverterParameters power data (FIXED):", {
     realPower: data.real_power,
     outputPower: data.output_power,
     currentPower: currentPower,
