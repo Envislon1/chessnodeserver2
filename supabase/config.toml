@@ -1,5 +1,0 @@
-
-project_id = "hzqnccsmejplilhmisgu"
-
-[functions.get-current-time]
-verify_jwt = false
