@@ -1,3 +1,4 @@
+
 import { 
   ChartContainer, 
   ChartTooltip 
@@ -310,7 +311,7 @@ export const PowerConsumptionChart = ({
             fillOpacity={1}
             fill="url(#powerGradient)" 
             yAxisId="power"
-            dot={{ r: 2 }}  // Add dots to each data point
+            dot={false}  // Remove dots from each data point
           />
           <Area 
             type="monotone" 
@@ -319,7 +320,7 @@ export const PowerConsumptionChart = ({
             fillOpacity={0.7}
             fill="url(#batteryGradient)" 
             yAxisId="percentage"
-            dot={{ r: 2 }}  // Add dots to each data point
+            dot={false}  // Remove dots from each data point
           />
         </AreaChart>
       </ChartContainer>

@@ -61,8 +61,9 @@ export const SystemTabs = ({
 
   return (
     <Tabs defaultValue="overview" className="w-full">
-      <TabsList className="grid grid-cols-2 bg-black/40 border-orange-500/20">
+      <TabsList className="grid grid-cols-3 bg-black/40 border-orange-500/20">
         <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="control">Control</TabsTrigger>
         <TabsTrigger value="data">Data</TabsTrigger>
       </TabsList>
       
@@ -79,6 +80,10 @@ export const SystemTabs = ({
           currentPower={power}
           firebaseData={firebaseData}
         />
+      </TabsContent>
+      
+      <TabsContent value="control" className="space-y-4">
+        <LoadControlPanel inverterId={inverterId} />
       </TabsContent>
       
       <TabsContent value="data" className="space-y-4">

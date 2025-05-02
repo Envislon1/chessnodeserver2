@@ -36,13 +36,15 @@ export const InverterParameters = ({
   // Convert system capacity to Watts for comparison with output_power
   const systemCapacityWatts = systemCapacity * 1000;
 
-  // Set the surge threshold at 80% of system capacity (3000W for 5KVA)
-  const isPowerSurge = data.output_power && systemCapacityWatts ? data.output_power / systemCapacityWatts > 0.8 // Trigger at 80% of system capacity (not device capacity)
-  : false;
+  // Get the current power value from data
+  const currentPower = data.output_power || data.real_power || 0;
+
+  // Set the surge threshold at 80% of system capacity
+  const isPowerSurge = systemCapacityWatts ? currentPower / systemCapacityWatts > 0.8 : false;
 
   // Calculate load percentage based on output power and system capacity
-  const loadPercentage = data.output_power && systemCapacityWatts 
-    ? Math.min(Math.round((data.output_power / systemCapacityWatts) * 100), 100) 
+  const loadPercentage = systemCapacityWatts 
+    ? Math.min(Math.round((currentPower / systemCapacityWatts) * 100), 100) 
     : 0;
 
   // Calculate battery percentage based on battery voltage and nominal voltage
@@ -72,7 +74,7 @@ export const InverterParameters = ({
         <CardContent>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-2xl font-bold text-white">{data.output_power?.toFixed(0) ?? 'N/A'}W</p>
+              <p className="text-2xl font-bold text-white">{currentPower?.toFixed(0) ?? 'N/A'}W</p>
               {isPowerSurge && <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">Surge</span>}
             </div>
             <div className="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden">
