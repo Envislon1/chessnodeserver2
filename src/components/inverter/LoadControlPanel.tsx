@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Plus, AlertTriangle, Trash2, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export const LoadControlPanel = ({ inverterId }: LoadControlPanelProps) => {
 
   const [newSwitchName, setNewSwitchName] = useState("");
   const [lastActivity, setLastActivity] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const MAX_LOADS = 6;
 
   const handleAddSwitch = async () => {
@@ -64,12 +66,23 @@ export const LoadControlPanel = ({ inverterId }: LoadControlPanelProps) => {
       loadNumber++;
     }
 
+    setIsLoading(true);
+    
     try {
-      // Insert the load with system_id (not inverter_id) to make it shared for all users
+      console.log("Adding load with system_id:", systemId, "and inverterId:", inverterId);
+      
+      // First get user session to verify authentication
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("User not authenticated");
+      }
+      
+      // Insert the load with both system_id and inverter_id to satisfy RLS policies
       const { data, error } = await supabase
         .from('inverter_loads')
         .insert({
           system_id: systemId,
+          inverter_id: inverterId, // Include inverterId to link to user's system
           name: newSwitchName.trim(),
           state: false,
           load_number: loadNumber
@@ -100,9 +113,11 @@ export const LoadControlPanel = ({ inverterId }: LoadControlPanelProps) => {
       console.error("Error adding load:", error);
       toast({
         title: "Failed to add load",
-        description: error.message,
+        description: error.message || "Could not add load due to security policy",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -204,10 +219,10 @@ export const LoadControlPanel = ({ inverterId }: LoadControlPanelProps) => {
         <Button
           onClick={handleAddSwitch}
           variant="outline"
-          disabled={!systemId || loads.length >= MAX_LOADS}
+          disabled={!systemId || loads.length >= MAX_LOADS || isLoading}
           className="border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white"
         >
-          <Plus className="h-4 w-4" />
+          {isLoading ? <span className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>
       </div>
 

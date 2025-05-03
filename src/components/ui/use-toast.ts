@@ -61,7 +61,7 @@ const reducer = (state: State, action: Action): State => {
       return {
         ...state,
         toasts: [
-          { id: genId(), ...action.toast },
+          { ...action.toast, id: genId() },
           ...state.toasts
         ].slice(0, TOAST_LIMIT),
       }
@@ -127,20 +127,17 @@ function dispatch(action: Action) {
 type Toast = Omit<ToasterToast, "id">
 
 function toast(props: Toast) {
-  const id = genId()
-
   const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",
-      toast: { ...props, id },
+      toast: { ...props },
     })
-  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+  const dismiss = () => dispatch({ type: "DISMISS_TOAST" })
 
   dispatch({
     type: "ADD_TOAST",
     toast: {
       ...props,
-      id,
       open: true,
       onOpenChange: (open) => {
         if (!open) dismiss()
@@ -149,7 +146,6 @@ function toast(props: Toast) {
   })
 
   return {
-    id: id,
     dismiss,
     update,
   }
