@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { WifiHigh, Upload, Lock, Unlock, Eye, EyeOff, CloudUp, CheckCircle, XCircle } from "lucide-react";
+import { WifiHigh, Upload, Lock, Unlock, Eye, EyeOff, Cloud, CheckCircle, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { 
   sendFirmwareUpdateToDevice, 
@@ -431,7 +430,7 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
                 className="text-orange-500 border-orange-500 hover:bg-orange-500 hover:text-white"
               >
                 {updateMode === 'internet' ? (
-                  <CloudUp className="h-4 w-4 mr-1" />
+                  <Cloud className="h-4 w-4 mr-1" />
                 ) : (
                   <WifiHigh className="h-4 w-4 mr-1" />
                 )}
@@ -451,7 +450,7 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
                     'bg-orange-500 hover:bg-orange-600 text-white rounded-r-none border-r-0' : 
                     'text-orange-500 border-orange-500 hover:bg-orange-500/20 rounded-r-none border-r-0'}
                 >
-                  <CloudUp className="h-3.5 w-3.5 mr-1" />
+                  <Cloud className="h-3.5 w-3.5 mr-1" />
                   Internet
                 </Button>
                 <Button
