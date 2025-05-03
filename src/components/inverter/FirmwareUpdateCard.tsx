@@ -34,6 +34,9 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  
+  // Use the hardcoded device IP if none is provided from props
+  const deviceAddress = deviceIp || "192.168.4.1";
 
   // Check if the current user is the owner of this system
   const [isOwner, setIsOwner] = useState(false);
@@ -201,10 +204,10 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
   };
   
   const deployToDevice = async () => {
-    if (!deviceIp || isLocked) {
+    if (isLocked) {
       toast({
-        title: "Device IP not available or access locked",
-        description: isLocked ? "Unlock firmware access first" : "Cannot deploy firmware without device IP address",
+        title: "Access locked",
+        description: "Unlock firmware access first",
         variant: "destructive",
       });
       return;
@@ -224,16 +227,12 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
         throw new Error("No firmware available for this device");
       }
       
-      // Now we trigger the OTA update by sending the firmware URL to the device
-      const deviceUrl = `http://${deviceIp}/update`;
-      
+      // Show update instructions with the device address
       toast({
-        title: "Deploying firmware",
-        description: `Sending update to device at ${deviceIp}...`,
+        title: "Deployment instructions",
+        description: `Connect to the device at ${deviceAddress} and follow the update instructions`,
       });
       
-      // In a production app, you would send this request from a server-side function
-      // For now, we'll show the user how it would work
       setShowInstructions(true);
     } catch (error: any) {
       toast({
@@ -332,7 +331,6 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
               
               <Button
                 onClick={deployToDevice}
-                disabled={!deviceIp}
                 variant="outline"
                 className="text-orange-500 border-orange-500 hover:bg-orange-500 hover:text-white"
               >
@@ -341,12 +339,10 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
               </Button>
             </div>
             
-            {!deviceIp && (
-              <p className="text-xs text-amber-500">
-                Note: Device IP address is required for direct deployment.
-                Make sure your device is connected to the local network.
-              </p>
-            )}
+            <p className="text-xs text-amber-500">
+              Note: Device will be available at {deviceAddress} in AP mode.
+              Make sure your device is connected to the network.
+            </p>
           </div>
         )}
         
@@ -363,9 +359,9 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
               <div className="bg-black/40 p-4 rounded-md">
                 <h4 className="font-medium text-orange-400 mb-2">On Your Hardware Device</h4>
                 <ol className="list-decimal list-inside space-y-2 text-sm">
-                  <li>Ensure your device is in AP mode (or connected to your WiFi)</li>
-                  <li>Navigate to the device's IP address ({deviceIp || "your-device-ip"}) in a web browser</li>
-                  <li>Go to the "/update" endpoint (http://{deviceIp || "your-device-ip"}/update)</li>
+                  <li>Connect to the device's WiFi network (usually named "InverterUpdater" or similar)</li>
+                  <li>Once connected, open a web browser and navigate to: <span className="font-mono bg-black/60 p-1 rounded text-orange-300">http://{deviceAddress}</span></li>
+                  <li>Go to the "/update" endpoint: <span className="font-mono bg-black/60 p-1 rounded text-orange-300">http://{deviceAddress}/update</span></li>
                   <li>The device will present an update form</li>
                   <li>Click "Choose File" and select the .bin firmware file</li>
                   <li>Click "Update" to begin the OTA process</li>
@@ -420,4 +416,3 @@ void loop() {
     </Card>
   );
 };
-
