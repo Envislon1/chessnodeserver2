@@ -1,6 +1,5 @@
-
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, onValue, get } from 'firebase/database';
+import { getDatabase, ref, set, onValue, get, remove } from 'firebase/database';
 import { supabase } from '@/integrations/supabase/client';
 
 const firebaseConfig = {
@@ -303,4 +302,88 @@ export const setAllDeviceStates = async (deviceId: string, updatePayload: any) =
     console.error('Error updating all device states:', error);
     throw error;
   }
+};
+
+/**
+ * Sends firmware update URL to device through Firebase
+ */
+export const sendFirmwareUpdateToDevice = async (deviceId: string, firmwareUrl: string) => {
+  try {
+    if (!deviceId) {
+      throw new Error("Invalid deviceId provided");
+    }
+    
+    // Ensure we're using the deviceId WITHOUT underscore prefix
+    const cleanDeviceId = deviceId.replace(/^_+/, '');
+    console.log(`Sending firmware update to device ${cleanDeviceId}`);
+    
+    // Create the path for the update
+    const updateRef = ref(firebaseDb, `/${cleanDeviceId}/update`);
+    
+    // Set the update URL
+    await set(updateRef, {
+      url: firmwareUrl,
+      timestamp: new Date().toISOString()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Error sending firmware update:', error);
+    throw error;
+  }
+};
+
+/**
+ * Clears the firmware update path after update is completed
+ */
+export const clearFirmwareUpdatePath = async (deviceId: string) => {
+  try {
+    if (!deviceId) {
+      throw new Error("Invalid deviceId provided");
+    }
+    
+    // Ensure we're using the deviceId WITHOUT underscore prefix
+    const cleanDeviceId = deviceId.replace(/^_+/, '');
+    console.log(`Clearing firmware update path for device ${cleanDeviceId}`);
+    
+    // Create the path for the update
+    const updateRef = ref(firebaseDb, `/${cleanDeviceId}/update`);
+    
+    // Remove the update node
+    await remove(updateRef);
+    
+    return true;
+  } catch (error) {
+    console.error('Error clearing firmware update path:', error);
+    throw error;
+  }
+};
+
+/**
+ * Subscribes to firmware update status from the device
+ */
+export const subscribeToFirmwareUpdateStatus = (deviceId: string, callback: (status: any) => void) => {
+  if (!deviceId) {
+    console.error("Invalid deviceId provided to subscribeToFirmwareUpdateStatus:", deviceId);
+    return () => {}; // Return empty unsubscribe function
+  }
+  
+  // Ensure we're using the deviceId WITHOUT underscore prefix for device data
+  const cleanDeviceId = deviceId.replace(/^_+/, '');
+  console.log(`Subscribing to firmware update status for: ${cleanDeviceId}`);
+  const statusRef = ref(firebaseDb, `/${cleanDeviceId}/update_status`);
+  
+  return onValue(statusRef, (snapshot) => {
+    const data = snapshot.val();
+    console.log(`Received firmware update status for ${cleanDeviceId}:`, data);
+    
+    if (data) {
+      callback(data);
+    } else {
+      // No status data available yet
+      callback(null);
+    }
+  }, (error) => {
+    console.error(`Firebase firmware status subscription error for device ${cleanDeviceId}:`, error);
+  });
 };

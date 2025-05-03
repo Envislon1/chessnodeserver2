@@ -5,8 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { WifiHigh, Upload, Lock, Unlock, Eye, EyeOff } from "lucide-react";
+import { WifiHigh, Upload, Lock, Unlock, Eye, EyeOff, CloudUp, CheckCircle, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { 
+  sendFirmwareUpdateToDevice, 
+  subscribeToFirmwareUpdateStatus, 
+  clearFirmwareUpdatePath 
+} from "@/integrations/firebase/client";
+import { Progress } from "@/components/ui/progress";
 
 interface FirmwareUpdateCardProps {
   selectedSystemId: string;
@@ -25,6 +31,15 @@ interface FirmwareRecord {
   updated_at: string;
 }
 
+// Define a type for firmware update status
+interface FirmwareUpdateStatus {
+  progress?: number;
+  status?: string;
+  message?: string;
+  error?: string;
+  completed?: boolean;
+}
+
 export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdateCardProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -34,12 +49,18 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  const [firmwareUpdateStatus, setFirmwareUpdateStatus] = useState<FirmwareUpdateStatus | null>(null);
+  const [deploymentInProgress, setDeploymentInProgress] = useState(false);
+  const [updateMode, setUpdateMode] = useState<'internet' | 'local'>('internet');
   
   // Use the hardcoded device IP if none is provided from props
   const deviceAddress = deviceIp || "192.168.4.1";
 
   // Check if the current user is the owner of this system
   const [isOwner, setIsOwner] = useState(false);
+  
+  // Store system ID for Firebase communications
+  const [systemDeviceId, setSystemDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
     // Get current user email for password verification
@@ -59,7 +80,7 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
       
       const { data, error } = await supabase
         .from('inverter_systems')
-        .select('user_id')
+        .select('user_id, system_id')
         .eq('id', selectedSystemId)
         .single();
         
@@ -67,11 +88,47 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
         console.error("Error checking system ownership:", error);
       } else if (data) {
         setIsOwner(data.user_id === session.user.id);
+        setSystemDeviceId(data.system_id);
       }
     };
     
     checkOwnership();
   }, [selectedSystemId]);
+  
+  // Subscribe to firmware update status when device ID changes
+  useEffect(() => {
+    if (!systemDeviceId) return;
+    
+    const unsubscribe = subscribeToFirmwareUpdateStatus(systemDeviceId, (status) => {
+      console.log("Received firmware update status:", status);
+      
+      if (!status) return;
+      
+      setFirmwareUpdateStatus(status);
+      
+      // If we received status with completed flag, device has finished the update
+      if (status.completed === true) {
+        if (status.status === 'success') {
+          toast({
+            title: "Firmware Update Successful",
+            description: "Device has been updated successfully!",
+          });
+        } else if (status.error) {
+          toast({
+            title: "Firmware Update Failed",
+            description: status.error || "Unknown error occurred",
+            variant: "destructive"
+          });
+        }
+        
+        // Clear the update path after 2 successful status messages
+        clearFirmwareUpdatePath(systemDeviceId);
+        setDeploymentInProgress(false);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [systemDeviceId]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -181,7 +238,7 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
         
       toast({
         title: "Firmware uploaded",
-        description: "The firmware is now ready for installation",
+        description: "The firmware is now ready for deployment",
       });
       
       setFile(null);
@@ -213,6 +270,24 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
       return;
     }
     
+    if (!systemDeviceId) {
+      toast({
+        title: "System ID Missing",
+        description: "Cannot find device identifier",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (deploymentInProgress) {
+      toast({
+        title: "Deployment in progress",
+        description: "Please wait for the current deployment to complete",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     try {
       // Get the latest firmware
       const { data: firmwareData, error: firmwareError } = await supabase
@@ -227,19 +302,38 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
         throw new Error("No firmware available for this device");
       }
       
-      // Show update instructions with the device address
-      toast({
-        title: "Deployment instructions",
-        description: `Connect to the device at ${deviceAddress} and follow the update instructions`,
-      });
+      if (updateMode === 'internet') {
+        // Send firmware URL to device via Firebase
+        await sendFirmwareUpdateToDevice(systemDeviceId, firmwareData.firmware_url);
+        
+        setDeploymentInProgress(true);
+        setFirmwareUpdateStatus({
+          status: 'initiated',
+          progress: 0,
+          message: 'Firmware update initiated. Waiting for device...'
+        });
+        
+        toast({
+          title: "OTA Update Initiated",
+          description: "Firmware update command sent to device. Please wait for the device to complete the update.",
+        });
+      } else {
+        // Show manual update instructions for local network mode
+        setShowInstructions(true);
+        
+        toast({
+          title: "Local Update Mode",
+          description: `Connect to the device at ${deviceAddress} and follow the update instructions`,
+        });
+      }
       
-      setShowInstructions(true);
     } catch (error: any) {
       toast({
         title: "Deployment failed",
         description: error.message || "Failed to deploy firmware",
         variant: "destructive",
       });
+      setDeploymentInProgress(false);
     }
   };
 
@@ -316,13 +410,14 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
                 accept=".bin"
                 onChange={handleFileChange}
                 className="bg-black/20 border-orange-500/20 text-white file:text-white file:bg-orange-500 file:border-none"
+                disabled={deploymentInProgress}
               />
             </div>
             
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mb-4">
               <Button
                 onClick={uploadFirmware}
-                disabled={!file || uploading}
+                disabled={!file || uploading || deploymentInProgress}
                 className="bg-orange-500 hover:bg-orange-600 text-white"
               >
                 <Upload className="h-4 w-4 mr-1" />
@@ -332,16 +427,90 @@ export const FirmwareUpdateCard = ({ selectedSystemId, deviceIp }: FirmwareUpdat
               <Button
                 onClick={deployToDevice}
                 variant="outline"
+                disabled={deploymentInProgress}
                 className="text-orange-500 border-orange-500 hover:bg-orange-500 hover:text-white"
               >
-                <WifiHigh className="h-4 w-4 mr-1" />
+                {updateMode === 'internet' ? (
+                  <CloudUp className="h-4 w-4 mr-1" />
+                ) : (
+                  <WifiHigh className="h-4 w-4 mr-1" />
+                )}
                 Deploy to Device
               </Button>
             </div>
             
+            {/* Update Mode selection */}
+            <div className="flex items-center space-x-4 mt-2 p-2 bg-black/30 rounded">
+              <span className="text-xs text-gray-300">Update Mode:</span>
+              <div className="flex">
+                <Button
+                  onClick={() => setUpdateMode('internet')}
+                  size="sm"
+                  variant={updateMode === 'internet' ? 'default' : 'outline'}
+                  className={updateMode === 'internet' ? 
+                    'bg-orange-500 hover:bg-orange-600 text-white rounded-r-none border-r-0' : 
+                    'text-orange-500 border-orange-500 hover:bg-orange-500/20 rounded-r-none border-r-0'}
+                >
+                  <CloudUp className="h-3.5 w-3.5 mr-1" />
+                  Internet
+                </Button>
+                <Button
+                  onClick={() => setUpdateMode('local')}
+                  size="sm"
+                  variant={updateMode === 'local' ? 'default' : 'outline'}
+                  className={updateMode === 'local' ? 
+                    'bg-orange-500 hover:bg-orange-600 text-white rounded-l-none' : 
+                    'text-orange-500 border-orange-500 hover:bg-orange-500/20 rounded-l-none'}
+                >
+                  <WifiHigh className="h-3.5 w-3.5 mr-1" />
+                  Local
+                </Button>
+              </div>
+            </div>
+            
+            {/* Update Status information */}
+            {deploymentInProgress && firmwareUpdateStatus && (
+              <div className="bg-black/30 p-4 rounded-md mt-4">
+                <h4 className="text-sm font-medium text-orange-400 mb-2">Update Status</h4>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-300">
+                      {firmwareUpdateStatus.status || 'Waiting for device...'}
+                    </span>
+                    {firmwareUpdateStatus.completed ? (
+                      firmwareUpdateStatus.status === 'success' ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-red-500" />
+                      )
+                    ) : null}
+                  </div>
+                  
+                  {firmwareUpdateStatus.progress !== undefined && (
+                    <Progress 
+                      value={firmwareUpdateStatus.progress} 
+                      className="h-2 bg-gray-700"
+                      indicatorClassName="bg-orange-500" 
+                    />
+                  )}
+                  
+                  {firmwareUpdateStatus.message && (
+                    <p className="text-xs text-gray-400 mt-1">{firmwareUpdateStatus.message}</p>
+                  )}
+                  
+                  {firmwareUpdateStatus.error && (
+                    <p className="text-xs text-red-400 mt-1">{firmwareUpdateStatus.error}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            
             <p className="text-xs text-amber-500">
-              Note: Device will be available at {deviceAddress} in AP mode.
-              Make sure your device is connected to the network.
+              {updateMode === 'internet' ? 
+                "Note: Internet OTA requires your device to have internet connection and be configured to check for updates." :
+                `Note: Device will be available at ${deviceAddress} in AP mode. Make sure your device is connected to the network.`
+              }
             </p>
           </div>
         )}
