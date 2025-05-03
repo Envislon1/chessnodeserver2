@@ -2,7 +2,7 @@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Power } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { useInverterAndLoadsSwitches } from "./useInverterAndLoadsSwitches";
 
 interface PowerSwitchProps {
