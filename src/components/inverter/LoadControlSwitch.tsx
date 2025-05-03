@@ -1,7 +1,7 @@
 
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useInverterAndLoadsSwitches } from "./useInverterAndLoadsSwitches";
 
@@ -34,6 +34,7 @@ export const LoadControlSwitch = ({
 
   const handleToggle = async (checked: boolean) => {
     try {
+      console.log(`Toggling load ${loadNumber} to ${checked ? 'ON' : 'OFF'}`);
       // We need to use the systemId for Firebase, but inverterId for Supabase
       await setSingleLoadAndAll(loadNumber, checked);
       onChange?.(loadNumber, checked);

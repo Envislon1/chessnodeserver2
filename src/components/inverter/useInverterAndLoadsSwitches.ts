@@ -1,10 +1,9 @@
-
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { subscribeToDeviceData, subscribeToControlStates, setAllDeviceStates } from "@/integrations/firebase/client";
 import { ref, get } from "firebase/database";
 import { firebaseDb } from "@/integrations/firebase/client";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/use-toast";
 
 export interface LoadSwitch {
   id: string;
@@ -26,19 +25,24 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
     const getSystemId = async () => {
       if (!inverterId) return;
 
-      const { data, error } = await supabase
-        .from('inverter_systems')
-        .select('system_id')
-        .eq('id', inverterId)
-        .maybeSingle();
+      try {
+        const { data, error } = await supabase
+          .from('inverter_systems')
+          .select('system_id')
+          .eq('id', inverterId)
+          .maybeSingle();
 
-      if (error) {
-        console.error('Error fetching system_id:', error);
-        return;
-      }
+        if (error) {
+          console.error('Error fetching system_id:', error);
+          return;
+        }
 
-      if (data?.system_id && isMounted) {
-        setSystemId(data.system_id);
+        if (data?.system_id && isMounted) {
+          console.log(`Retrieved system_id: ${data.system_id} for inverterId: ${inverterId}`);
+          setSystemId(data.system_id);
+        }
+      } catch (err) {
+        console.error('Exception in getSystemId:', err);
       }
     };
 
@@ -65,6 +69,7 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
         }
 
         if (systemLoads && isMounted) {
+          console.log(`Retrieved ${systemLoads.length} loads for system_id: ${systemId}`);
           setLoads(
             systemLoads.map((load) => ({
               id: load.id,
@@ -93,11 +98,13 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
       try {
         // Use the prefixed ID for control data
         const controlDeviceId = `_${systemId}`;
+        console.log(`Fetching initial Firebase control data for: ${controlDeviceId}`);
         const deviceRef = ref(firebaseDb, `/${controlDeviceId}`);
         const snapshot = await get(deviceRef);
         const data = snapshot.val();
 
         if (data) {
+          console.log(`Initial Firebase control data received:`, data);
           const invState = data.power === 1;
           setInverterState(invState);
 
@@ -128,6 +135,7 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
     if (!systemId) return;
     
     // Use clean system ID without prefix for device data
+    console.log(`Subscribing to device data for system: ${systemId}`);
     const unsubscribe = subscribeToDeviceData(systemId, (data) => {
       if (!data) return;
       setDeviceData(data);
@@ -141,6 +149,7 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
     if (!systemId) return;
     
     // Control states need prefix
+    console.log(`Subscribing to control states for system: ${systemId}`);
     const unsubscribe = subscribeToControlStates(systemId, (controlData) => {
       if (!controlData) return;
       
@@ -163,7 +172,10 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
 
   // Send all states to Firebase with "_" prefix and update Supabase
   const setAllStates = async (next: { inverter: boolean, loads: LoadSwitch[] }) => {
-    if (!systemId) return false;
+    if (!systemId) {
+      console.error("Cannot update states: systemId is null");
+      return false;
+    }
 
     try {
       // 1. Prepare data shape for Firebase - control data
@@ -175,8 +187,11 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
         firebaseUpdate[`load_${load.load_number}`] = load.state ? 1 : 0;
       }
 
+      console.log(`Updating Firebase with data:`, firebaseUpdate);
+
       // 2. Set all in one go for Firebase with prefix
       await setAllDeviceStates(systemId, firebaseUpdate);
+      console.log("Firebase update successful");
 
       // 3. Update Supabase for each changed load (by id)
       for (const load of next.loads) {
@@ -185,6 +200,7 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
           .update({ state: load.state })
           .eq('id', load.id);
       }
+      console.log("Supabase update successful");
 
       return true;
     } catch (error) {
@@ -196,6 +212,7 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
   // Handlers
   const setInverterAndLoads = async (newInverterState: boolean) => {
     // Send inverter update with current loads states
+    console.log(`Setting inverter state to ${newInverterState}`);
     const updates = { inverter: newInverterState, loads };
     const ok = await setAllStates(updates);
     if (ok) setInverterState(newInverterState);
@@ -204,6 +221,7 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
 
   const setSingleLoadAndAll = async (loadNumber: number, newState: boolean) => {
     // Change one load, keep others + inverter as is
+    console.log(`Setting load ${loadNumber} to ${newState}`);
     const newLoads = loads.map((l) =>
       l.load_number === loadNumber ? { ...l, state: newState } : l
     );
@@ -214,6 +232,7 @@ export function useInverterAndLoadsSwitches(inverterId: string) {
 
     if (ok) {
       // Only update the local state if the operations succeeded
+      console.log(`Successfully updated load ${loadNumber} to ${newState}`);
       setLoads(newLoads);
     }
 

@@ -280,8 +280,13 @@ export const setAllDeviceStates = async (deviceId: string, updatePayload: any) =
     const currentData = snapshot.val() || {};
     
     // Get current user's email for logging
-    const { data: { user } } = await supabase.auth.getUser();
-    const userEmail = user?.email || 'unknown';
+    let userEmail = 'unknown';
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      userEmail = user?.email || 'unknown';
+    } catch (e) {
+      console.error("Error getting user email:", e);
+    }
     
     const finalData = {
       ...currentData,
