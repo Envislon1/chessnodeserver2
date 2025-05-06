@@ -62,9 +62,9 @@ export const InverterParameters = ({
   // For lead acid, minimum voltage is nominal/1.15 and maximum is nominal*1.15
   const calculateBatteryPercentage = () => {
     // If battery_percentage is directly available, use it
-    if (data.battery_percentage !== undefined) {
-      return 100;
-    }
+    // if (data.battery_percentage !== undefined) {
+    //   return data.battery_percentage;
+    // }
     
     // Otherwise calculate from voltage
     if (data.battery_voltage && data.nominal_voltage && data.nominal_voltage > 0) {
