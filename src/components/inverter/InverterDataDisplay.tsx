@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DeviceStatusMonitor } from "./DeviceStatusMonitor";
@@ -290,7 +291,7 @@ export const InverterDataDisplay = ({ inverterId, deviceData, firebaseData }: In
           </CardContent>
         </Card>
 
-        {/* Energy & Source Card */}
+        {/* Energy & Source Card - MODIFIED: removed Load States section */}
         <Card className="bg-black/40 border-orange-500/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Energy & Source</CardTitle>
@@ -323,51 +324,58 @@ export const InverterDataDisplay = ({ inverterId, deviceData, firebaseData }: In
                     Inverter {parsedData.inverterState ? 'On' : 'Off'}
                   </span>
                 </div>
-                
-                {/* Load states from hook which gets data from "_" prefixed path */}
-                {loads.length > 0 && (
-                  <div className="mt-1 pt-1 border-t border-gray-700">
-                    <p className="text-xs text-gray-400 mb-1">Load States:</p>
-                    <div className="grid grid-cols-3 gap-1">
-                      {loads.map((load) => (
-                        <div key={load.id} className="flex items-center text-xs">
-                          <div className={`w-2 h-2 rounded-full mr-1 ${load.state ? 'bg-green-500' : 'bg-gray-600'}`}></div>
-                          <span className={load.state ? 'text-green-400' : 'text-gray-400'}>
-                            {load.name}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Activity Log */}
-      {(parsedData.lastUserPower || parsedData.lastUserEnergy || firebaseData?.lastUpdate) && (
-        <Card className="bg-black/40 border-orange-500/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-white">Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs">
-            {parsedData.lastUserPower && (
-              <p className="text-gray-300">Power Control: {parsedData.lastUserPower}</p>
-            )}
-            {parsedData.lastUserEnergy && (
-              <p className="text-gray-300">Energy Reset: {parsedData.lastUserEnergy}</p>
-            )}
-            {firebaseData?.lastUpdate && (
-              <p className="text-gray-300">Last Update: {new Date(firebaseData.lastUpdate).toLocaleString()}</p>
-            )}
-            {firebaseData?.lastUserPower && (
-              <p className="text-gray-300">Last User: {firebaseData.lastUserPower}</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Second row grid for Load States and Activity Log */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Load States Card - NEW CARD */}
+        {loads.length > 0 && (
+          <Card className="bg-black/40 border-orange-500/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white">Load States</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-2">
+                {loads.map((load) => (
+                  <div key={load.id} className="flex items-center gap-2 text-sm">
+                    <div className={`w-3 h-3 rounded-full ${load.state ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+                    <span className={load.state ? 'text-green-400' : 'text-gray-400'}>
+                      {load.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Activity Log */}
+        {(parsedData.lastUserPower || parsedData.lastUserEnergy || firebaseData?.lastUpdate) && (
+          <Card className="bg-black/40 border-orange-500/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white">Recent Activity</CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs">
+              {parsedData.lastUserPower && (
+                <p className="text-gray-300">Power Control: {parsedData.lastUserPower}</p>
+              )}
+              {parsedData.lastUserEnergy && (
+                <p className="text-gray-300">Energy Reset: {parsedData.lastUserEnergy}</p>
+              )}
+              {firebaseData?.lastUpdate && (
+                <p className="text-gray-300">Last Update: {new Date(firebaseData.lastUpdate).toLocaleString()}</p>
+              )}
+              {firebaseData?.lastUserPower && (
+                <p className="text-gray-300">Last User: {firebaseData.lastUserPower}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };
