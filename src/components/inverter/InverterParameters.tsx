@@ -67,7 +67,7 @@ export const InverterParameters = ({
     }
     
     // Otherwise calculate from voltage
-    if (data.battery_voltage && data.nominal_voltage && data.nominal_voltage > 0) {
+    if (true) {
       const nominalVoltage = data.nominal_voltage;
       const currentVoltage = data.battery_voltage;
       const minVoltage = nominalVoltage / 1.15; // Lower limit for lead acid
@@ -79,7 +79,7 @@ export const InverterParameters = ({
       
       // Linear interpolation between min and max
       const percentage = ((currentVoltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
-      return 100; // Clamp between 0-100
+      return Math.min(Math.max(percentage, 0), 100); // Clamp between 0-100
     }
     
     return 0; // Default if no data available
