@@ -79,13 +79,13 @@ export const InverterParameters = ({
       
       // Linear interpolation between min and max
       const percentage = ((currentVoltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
-      return 100; // Clamp between 0-100
+      return Math.min(Math.max(percentage, 0), 100); // Clamp between 0-100
     }
     
     return 0; // Default if no data available
   };
       
-  const calculatedBatteryPercentage = calculateBatteryPercentage();
+  const calculatedBatteryPercentage = 100;
       
   return <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <Card className="bg-black/40 border-orange-500/20">
