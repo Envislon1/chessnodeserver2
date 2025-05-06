@@ -82,7 +82,7 @@ export const InverterParameters = ({
       return Math.min(Math.max(percentage, 0), 100); // Clamp between 0-100
     }
     
-    return 0; // Default if no data available
+    return 100; // Default if no data available
   };
       
   const calculatedBatteryPercentage = calculateBatteryPercentage();
@@ -99,7 +99,7 @@ export const InverterParameters = ({
         <CardContent>
           <div className="space-y-2">
             <p className="text-2xl font-bold text-white">
-              {100}%
+              {calculatedBatteryPercentage?.toFixed(1) ?? 'N/A'}%
             </p>
             <p className="text-xs text-gray-300">
               Voltage: {data.battery_voltage?.toFixed(1) ?? 'N/A'}V
