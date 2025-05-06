@@ -3,7 +3,6 @@ import { LoadControlPanel } from "@/components/inverter/LoadControlPanel";
 import { PowerConsumptionChart } from "@/components/inverter/PowerConsumptionChart";
 import { InverterDataDisplay } from "@/components/inverter/InverterDataDisplay";
 import { FirmwareUpdateCard } from "@/components/inverter/FirmwareUpdateCard";
-import { InverterStateCard } from "@/components/inverter/InverterStateCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useEffect } from "react";
@@ -58,11 +57,35 @@ export const SystemTabs = ({
   const loadValue = firebaseData?.power === 1 ? 
     parseFloat(firebaseData?.load || '0') || parseFloat(firebaseData?.real_power || '0') : 0;
 
-  // Calculate battery percentage with 1.15 scaling factor for the nominal voltage
-  const batteryPercentage = firebaseData?.battery_percentage || 
-    (firebaseData?.battery_voltage && firebaseData?.nominal_voltage ? 
-      Math.min(Math.max((firebaseData.battery_voltage / (firebaseData.nominal_voltage * 1.15)) * 100, 0), 100) : 
-      parameters?.battery_percentage);
+  // Calculate battery percentage with interpolation for lead acid batteries
+  // For lead acid, minimum voltage is nominal/1.15 and maximum is nominal*1.15
+  const calculateBatteryPercentage = () => {
+    // If battery_percentage is directly available from Firebase, use it
+    if (firebaseData?.battery_percentage !== undefined) {
+      return firebaseData.battery_percentage;
+    }
+    
+    // Otherwise calculate from voltage
+    if (firebaseData?.battery_voltage && firebaseData?.nominal_voltage) {
+      const nominalVoltage = firebaseData.nominal_voltage;
+      const currentVoltage = firebaseData.battery_voltage;
+      const minVoltage = nominalVoltage / 1.15; // Lower limit for lead acid
+      const maxVoltage = nominalVoltage * 1.15; // Upper limit for lead acid
+      
+      // Interpolate between min and max voltage
+      if (currentVoltage <= minVoltage) return 0;
+      if (currentVoltage >= maxVoltage) return 100;
+      
+      // Linear interpolation between min and max
+      const percentage = ((currentVoltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
+      return Math.min(Math.max(percentage, 0), 100); // Clamp between 0-100
+    }
+    
+    // Fall back to parameters data if available
+    return parameters?.battery_percentage || 0;
+  };
+
+  const batteryPercentage = calculateBatteryPercentage();
 
   // Add nominal voltage and power values to parameters if available from firebase
   const extendedParameters = parameters ? {

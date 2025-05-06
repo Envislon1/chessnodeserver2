@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InverterStateCard } from "./InverterStateCard";
 
@@ -59,12 +58,34 @@ export const InverterParameters = ({
     ? Math.min(Math.round((currentPower / systemCapacityWatts) * 100), 100) 
     : 0;
 
-  // Calculate battery percentage based on battery voltage and nominal voltage if not directly available
-  // Apply 1.15 scaling factor to nominal voltage to account for fully charged voltage being higher
-  const calculatedBatteryPercentage = data.battery_percentage || 
-    (data.battery_voltage && data.nominal_voltage && data.nominal_voltage > 0 
-      ? Math.min(Math.max((data.battery_voltage / (data.nominal_voltage * 1.15)) * 100, 0), 100)
-      : 0);
+  // Calculate battery percentage using interpolation for lead acid batteries
+  // For lead acid, minimum voltage is nominal/1.15 and maximum is nominal*1.15
+  const calculateBatteryPercentage = () => {
+    // If battery_percentage is directly available, use it
+    if (data.battery_percentage !== undefined) {
+      return data.battery_percentage;
+    }
+    
+    // Otherwise calculate from voltage
+    if (data.battery_voltage && data.nominal_voltage && data.nominal_voltage > 0) {
+      const nominalVoltage = data.nominal_voltage;
+      const currentVoltage = data.battery_voltage;
+      const minVoltage = nominalVoltage / 1.15; // Lower limit for lead acid
+      const maxVoltage = nominalVoltage * 1.15; // Upper limit for lead acid
+      
+      // Interpolate between min and max voltage
+      if (currentVoltage <= minVoltage) return 0;
+      if (currentVoltage >= maxVoltage) return 100;
+      
+      // Linear interpolation between min and max
+      const percentage = ((currentVoltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
+      return Math.min(Math.max(percentage, 0), 100); // Clamp between 0-100
+    }
+    
+    return 0; // Default if no data available
+  };
+      
+  const calculatedBatteryPercentage = calculateBatteryPercentage();
       
   return <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <Card className="bg-black/40 border-orange-500/20">

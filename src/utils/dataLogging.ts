@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 
 export const logInverterData = async (deviceId: string, data: any): Promise<boolean> => {
@@ -60,12 +61,16 @@ export const fetchHistoricalInverterData = async (inverterId: string, timeRange:
     // Parse JSON data if it's stored as a string
     const processedData = data.map(record => {
       try {
+        let parsedData: any = {};
+        
         if (record.data && typeof record.data === 'string') {
-          record.data = JSON.parse(record.data);
+          parsedData = JSON.parse(record.data);
+        } else {
+          parsedData = record.data || {};
         }
         
         // Extract power value for chart display
-        const output_power = record.data?.power || 0;
+        const output_power = typeof parsedData.power === 'number' ? parsedData.power : 0;
         
         return {
           ...record,
