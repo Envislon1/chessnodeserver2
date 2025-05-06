@@ -79,7 +79,7 @@ export const InverterParameters = ({
       
       // Linear interpolation between min and max
       const percentage = ((currentVoltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
-      return 100; // Clamp between 0-100
+      return Math.min(Math.max(percentage, 0), 100); // Clamp between 0-100
     }
     
     return 0; // Default if no data available
@@ -99,7 +99,7 @@ export const InverterParameters = ({
         <CardContent>
           <div className="space-y-2">
             <p className="text-2xl font-bold text-white">
-              {calculatedBatteryPercentage?.toFixed(1) ?? 'N/A'}%
+              {100}%
             </p>
             <p className="text-xs text-gray-300">
               Voltage: {data.battery_voltage?.toFixed(1) ?? 'N/A'}V
