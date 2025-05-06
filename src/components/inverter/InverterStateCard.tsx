@@ -20,21 +20,6 @@ export const InverterStateCard = ({
   const isDischarging = inverterOn && !mainsPresent;
   const isCharged = mainsPresent && batteryPercentage >= 95;
   
-  // Get the appropriate text description for the status
-  const getInverterStatusText = () => {
-    if (isCharging) {
-      return "Charging"; // Simplified from "Charging from Mains"
-    } else if (isDischarging) {
-      return "Discharging Battery";
-    } else if (isCharged) {
-      return "Battery Fully Charged";
-    } else if (!inverterOn) {
-      return "Inverter Off";
-    } else {
-      return "Standby Mode";
-    }
-  };
-  
   // Get additional solar information if available
   const getSolarText = () => {
     if (solarPresent) {
@@ -44,7 +29,6 @@ export const InverterStateCard = ({
   };
 
   const solarText = getSolarText();
-  const statusText = getInverterStatusText();
 
   return (
     <Card className="bg-black/40 border-orange-500/20">
@@ -73,16 +57,7 @@ export const InverterStateCard = ({
             className="mx-auto"
           />
           
-          <div className="text-center space-y-2">
-            <p className={`text-sm font-medium ${
-              isCharging ? "text-green-400" : 
-              isDischarging ? "text-orange-400" : 
-              isCharged ? "text-green-400" : 
-              "text-gray-400"
-            }`}>
-              {statusText}
-            </p>
-            
+          <div className="text-center">
             {solarText && (
               <p className="text-xs text-yellow-400 flex items-center justify-center gap-1">
                 <svg 
