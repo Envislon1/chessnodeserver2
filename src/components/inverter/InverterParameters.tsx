@@ -78,8 +78,8 @@ export const InverterParameters = ({
       // if (currentVoltage >= maxVoltage) return 100;
       
       // Linear interpolation between min and max
-      const percentage = 100;
-      return Math.min(Math.max(percentage, 0), 100); // Clamp between 0-100
+      const percentage = ((currentVoltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
+      return 100; // Clamp between 0-100
     }
     
     return 0; // Default if no data available
