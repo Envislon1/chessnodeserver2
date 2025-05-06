@@ -10,8 +10,8 @@ interface ParameterProps {
     output_power?: number;
     frequency?: number;
     power_factor?: number;
-    mains_present?: boolean;
-    solar_present?: boolean;
+    mains_present?: boolean | number;
+    solar_present?: boolean | number;
     energy_kwh?: number;
     apparent_power?: number;
     reactive_power?: number;
@@ -167,7 +167,7 @@ export const InverterParameters = ({
         </CardContent>
       </Card>
 
-      {/* Add InverterStateCard here */}
+      {/* Fix the way we're checking mains_present and solar_present properties */}
       <InverterStateCard 
         batteryPercentage={calculatedBatteryPercentage || 0} 
         mainsPresent={data.mains_present === true || data.mains_present === 1}

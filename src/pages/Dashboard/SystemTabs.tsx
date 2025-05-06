@@ -16,8 +16,8 @@ interface InverterSystemParameters {
   output_power: number;
   frequency: number;
   power_factor: number;
-  mains_present: boolean;
-  solar_present: boolean;
+  mains_present: boolean | number;
+  solar_present: boolean | number;
   energy_kwh: number;
   apparent_power: number;
   reactive_power: number;
