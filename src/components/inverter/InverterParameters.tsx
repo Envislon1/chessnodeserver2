@@ -74,8 +74,8 @@ export const InverterParameters = ({
       const maxVoltage = nominalVoltage * 1.15; // Upper limit for lead acid
       
       // Interpolate between min and max voltage
-      if (currentVoltage <= minVoltage) return 0;
-      if (currentVoltage >= maxVoltage) return 100;
+      // if (currentVoltage <= minVoltage) return 0;
+      // if (currentVoltage >= maxVoltage) return 100;
       
       // Linear interpolation between min and max
       const percentage = ((currentVoltage - minVoltage) / (maxVoltage - minVoltage)) * 100;
