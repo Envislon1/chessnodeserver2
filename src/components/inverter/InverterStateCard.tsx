@@ -23,7 +23,7 @@ export const InverterStateCard = ({
   // Get the appropriate text description for the status
   const getInverterStatusText = () => {
     if (isCharging) {
-      return "Charging from Mains";
+      return "Charging"; // Simplified from "Charging from Mains"
     } else if (isDischarging) {
       return "Discharging Battery";
     } else if (isCharged) {
