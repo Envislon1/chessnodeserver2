@@ -26,5 +26,6 @@ export default defineConfig(({ mode }) => ({
     emptyOutDir: true,
     chunkSizeWarningLimit: 1600,
   },
+  // Always use relative paths for Electron builds
   base: process.env.IS_ELECTRON === 'true' ? './' : '/',
 }));

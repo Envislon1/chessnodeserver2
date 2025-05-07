@@ -1,3 +1,4 @@
+
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
@@ -13,8 +14,8 @@ function createWindow() {
     height: 800,
     title: "PVTCloud",
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, '../public/favicon.ico')
@@ -28,12 +29,44 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     // In production, load the built files
+    const indexPath = path.join(__dirname, '../dist/index.html');
     mainWindow.loadURL(url.format({
-      pathname: path.join(__dirname, '../dist/index.html'),
+      pathname: indexPath,
       protocol: 'file:',
       slashes: true
     }));
+    
+    // Log the path being loaded to help with debugging
+    console.log('Loading from:', indexPath);
   }
+
+  // Handle loading errors
+  mainWindow.webContents.on('did-fail-load', () => {
+    console.error('Failed to load application');
+    // Show a message to the user
+    mainWindow.webContents.loadURL(`data:text/html;charset=utf-8,
+      <html>
+        <head>
+          <title>Error Loading Application</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+            h2 { color: #c00; }
+            code { background: #f5f5f5; padding: 2px 5px; border-radius: 3px; }
+          </style>
+        </head>
+        <body>
+          <h2>Error Loading Application</h2>
+          <p>The application could not be loaded. Possible reasons:</p>
+          <ul>
+            <li>The application has not been built. Try running <code>npm run build</code> first.</li>
+            <li>The development server is not running. Try running <code>npm run dev</code>.</li>
+            <li>There's an error in the application code.</li>
+          </ul>
+          <p>Check the console for more details.</p>
+        </body>
+      </html>
+    `);
+  });
 
   // Emitted when the window is closed
   mainWindow.on('closed', () => {

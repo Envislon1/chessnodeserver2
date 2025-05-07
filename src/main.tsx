@@ -1,4 +1,6 @@
+
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 import { defineCustomElements } from '@ionic/pwa-elements/loader';
@@ -13,7 +15,9 @@ const isElectron = window.navigator.userAgent.toLowerCase().indexOf('electron') 
 const rootElement = document.getElementById("root")
 if (rootElement) {
   createRoot(rootElement).render(
-    <App />  // No need to wrap App with BrowserRouter here
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   )
 } else {
   console.error("Root element not found!")
