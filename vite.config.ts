@@ -1,3 +1,4 @@
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
@@ -19,4 +20,11 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    outDir: 'dist',
+    // Ensures proper Electron compatibility
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1600,
+  },
+  base: process.env.IS_ELECTRON === 'true' ? './' : '/',
 }));
