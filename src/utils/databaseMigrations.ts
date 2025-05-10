@@ -43,14 +43,15 @@ export const verifyLastSeenColumns = async () => {
     }
     
     // Check and update any devices that should be marked offline
-    const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    // Reduced from 3 minutes to 2 minutes to make offline detection more responsive
+    const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     
-    // Find devices that were last seen more than 3 minutes ago but are still marked online
+    // Find devices that were last seen more than 2 minutes ago but are still marked online
     const { data: outdatedDevices, error: outdatedError } = await supabase
       .from('inverter_systems')
       .select('id, system_id, last_seen_at')
       .eq('is_online', true)
-      .lt('last_seen_at', threeMinsAgo);
+      .lt('last_seen_at', twoMinsAgo);
       
     if (outdatedError) {
       console.error("Error checking for outdated devices:", outdatedError);

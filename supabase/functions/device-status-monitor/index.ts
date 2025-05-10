@@ -47,7 +47,7 @@ serve(async (req) => {
     // Get all device IDs from the inverter_systems table
     const { data: systems, error: systemsError } = await supabase
       .from('inverter_systems')
-      .select('id, system_id, last_random_value, last_seen_at')
+      .select('id, system_id, last_random_value, last_seen_at, is_online')
 
     if (systemsError) {
       throw new Error(`Error fetching inverter systems: ${systemsError.message}`)
@@ -66,8 +66,13 @@ serve(async (req) => {
       }
 
       const deviceId = system.system_id
-      const isCurrentlyOnline = deviceStatus.get(deviceId) || false
+      const isCurrentlyOnline = system.is_online || false
       const lastChecked = deviceLastChecked.get(deviceId) || 0
+
+      // Initialize device status map from database value
+      if (!deviceStatus.has(deviceId)) {
+        deviceStatus.set(deviceId, isCurrentlyOnline)
+      }
 
       // Determine if we should check this device now based on its current status
       const checkInterval = isCurrentlyOnline 
@@ -84,8 +89,12 @@ serve(async (req) => {
       deviceLastChecked.set(deviceId, now)
 
       try {
+        // Generate timestamp for strong cache busting
+        const timestampNow = new Date().getTime()
         // Use a cache busting parameter to ensure we get fresh data
-        const cacheBustParam = `_cb=${now}`
+        const cacheBustParam = `_cb=${timestampNow}`
+        
+        console.log(`Checking device ${deviceId} with cache buster: ${cacheBustParam}`)
         
         // Fetch the current data from Firebase
         const response = await fetch(`${FIREBASE_URL}/${deviceId}.json?${cacheBustParam}`, {
@@ -99,7 +108,7 @@ serve(async (req) => {
           console.error(`Failed to fetch data for device ${deviceId}: ${response.statusText}`)
           
           // If we can't reach Firebase, mark device as offline if it was previously online
-          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
+          if (isCurrentlyOnline) {
             await updateDeviceStatus(supabase, system.id, false)
             deviceStatus.set(deviceId, false)
             results.push({ deviceId, status: 'offline', updated: true, reason: 'firebase_unreachable' })
@@ -114,7 +123,7 @@ serve(async (req) => {
           console.log(`No data found for device ${deviceId}`)
           
           // If no data in Firebase, mark device as offline if it was previously online
-          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
+          if (isCurrentlyOnline) {
             await updateDeviceStatus(supabase, system.id, false)
             deviceStatus.set(deviceId, false)
             results.push({ deviceId, status: 'offline', updated: true, reason: 'no_data' })
@@ -123,34 +132,37 @@ serve(async (req) => {
           continue
         }
 
-        // Extract the random value or inverter_state from the Firebase data
-        const randomValue = getDeviceStatusValue(data)
+        // Extract the random value from the Firebase data (crucial for detecting changes)
+        const randomValue = getDeviceRandomValue(data)
         const lastSeenAt = system.last_seen_at ? new Date(system.last_seen_at).getTime() : 0
         
         // Log for debugging
-        console.log(`Device ${deviceId}: current value = ${randomValue}, previous = ${system.last_random_value}, last seen: ${system.last_seen_at}`)
+        console.log(`Device ${deviceId}: current random value = ${randomValue}, previous = ${system.last_random_value}, last seen: ${system.last_seen_at}`)
         
         if (randomValue === undefined) {
-          console.log(`No status indicator found for device ${deviceId}`)
-          // If no status indicator and was previously online, mark as offline
-          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
+          console.log(`No random value found for device ${deviceId}`)
+          // If no random value and was previously online, mark as offline
+          if (isCurrentlyOnline) {
             await updateDeviceStatus(supabase, system.id, false)
             deviceStatus.set(deviceId, false)
-            results.push({ deviceId, status: 'offline', updated: true, reason: 'no_status_indicator' })
+            results.push({ deviceId, status: 'offline', updated: true, reason: 'no_random_value' })
           }
           continue
         }
 
         // Logic for active devices:
-        // 1. If random value has changed since the last check, the device is actively sending data
-        const valueHasChanged = randomValue !== system.last_random_value
+        // If random value has changed since the last check, the device is actively sending data
+        const valueHasChanged = randomValue !== system.last_random_value && randomValue !== 0
         
-        // 2. Check time since last activity
+        // Check time since last activity
         const timeSinceLastSeen = lastSeenAt ? now - lastSeenAt : Infinity
         const isInactive = timeSinceLastSeen > OFFLINE_THRESHOLD
         
+        // Debug logs
+        console.log(`Device ${deviceId}: valueHasChanged=${valueHasChanged}, timeSinceLastSeen=${Math.floor(timeSinceLastSeen/1000)}s, isInactive=${isInactive}`)
+        
         if (valueHasChanged) {
-          // Device is active, update as online with new timestamp
+          // Device is active, update as online with new timestamp and random_value
           const { error: updateError } = await supabase
             .from('inverter_systems')
             .update({
@@ -164,20 +176,23 @@ serve(async (req) => {
             console.error(`Error updating device ${deviceId} as online:`, updateError)
             results.push({ deviceId, status: 'error', message: updateError.message })
           } else {
-            console.log(`Updated device ${deviceId} as ONLINE, new value: ${randomValue}`)
+            console.log(`Updated device ${deviceId} as ONLINE, new random_value: ${randomValue}`)
             deviceStatus.set(deviceId, true)
             results.push({ deviceId, status: 'online', updated: true })
           }
         } else if (isInactive) {
           // No activity for a while, mark as offline
-          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
+          if (isCurrentlyOnline) {
             await updateDeviceStatus(supabase, system.id, false)
             deviceStatus.set(deviceId, false)
             console.log(`Updated device ${deviceId} as OFFLINE, no activity for > ${OFFLINE_THRESHOLD/1000}s`)
             results.push({ deviceId, status: 'offline', updated: true, reason: 'inactivity' })
+          } else {
+            results.push({ deviceId, status: 'still_offline', updated: false })
           }
         } else {
           // No change but not inactive yet, maintain current status
+          console.log(`Device ${deviceId}: No change in random_value, maintaining current online status: ${isCurrentlyOnline}`)
           results.push({ deviceId, status: 'no change', updated: false })
         }
       } catch (error) {
@@ -199,40 +214,24 @@ serve(async (req) => {
   }
 })
 
-// Helper function to extract status value from different data formats
-function getDeviceStatusValue(data: any): number | undefined {
-  // First check if random_value exists directly
-  if (data.random_value !== undefined) {
-    return parseInt(String(data.random_value), 10) || 0
-  }
-  
-  // Then check for inverter_state (boolean or number)
-  if (data.inverter_state !== undefined) {
-    return data.inverter_state === true || data.inverter_state === 1 ? 1 : 0
-  }
-  
-  // Check for power value (0 or 1)
-  if (data.power !== undefined) {
-    return data.power === true || data.power === 1 ? 1 : 0
-  }
-  
-  // Finally check if there's a data string format to parse
+// Helper function to extract random value from different data formats
+function getDeviceRandomValue(data: any): number | undefined {
+  // First check if the data field contains a comma-separated string with the random value at position 20
   if (data.data && typeof data.data === 'string') {
     try {
       const values = data.data.split(',')
-      // Based on the Arduino code, the random value is at position 20
       if (values.length >= 21) {
+        // From the hardware code, we know the random value is at position 20
         return parseInt(values[20], 10) || 0
-      }
-      
-      // Check for inverter_state at position 21 if available
-      if (values.length >= 22) {
-        const inverterState = values[21] === "1" || values[21] === "true"
-        return inverterState ? 1 : 0
       }
     } catch (e) {
       console.error(`Error parsing data string:`, e)
     }
+  }
+  
+  // Check if random_value exists directly in the data object
+  if (data.random_value !== undefined) {
+    return parseInt(String(data.random_value), 10) || 0
   }
   
   return undefined
@@ -240,7 +239,9 @@ function getDeviceStatusValue(data: any): number | undefined {
 
 // Helper function to update device status
 async function updateDeviceStatus(supabase: any, systemId: string, isOnline: boolean) {
-  const updateData: any = { is_online: isOnline };
+  const updateData: any = { 
+    is_online: isOnline
+  };
   
   // Only update last_seen_at if going online
   if (isOnline) {

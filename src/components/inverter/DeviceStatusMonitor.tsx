@@ -16,7 +16,7 @@ export const DeviceStatusMonitor = ({
   refreshInterval = 10000, // Poll every 10 seconds
 }: DeviceStatusMonitorProps) => {
   const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState<number>(0);
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
   const [systemId, setSystemId] = useState<string | null>(null);
   const isInitialMount = useRef(true);
   
@@ -44,12 +44,12 @@ export const DeviceStatusMonitor = ({
           // Initialize online status based on is_online from database
           setIsOnline(data.is_online || false);
           
-          // Update last seen timestamp if available
+          // Set the last seen timestamp if available
           if (data.last_seen_at) {
-            const lastSeen = new Date(data.last_seen_at).getTime();
-            setLastUpdateTime(lastSeen);
+            setLastSeenAt(data.last_seen_at);
             
             const now = Date.now();
+            const lastSeen = new Date(data.last_seen_at).getTime();
             const timeSinceLastSeen = now - lastSeen;
             
             console.log(`Device ${data.system_id} initial status:`, {
@@ -142,11 +142,15 @@ export const DeviceStatusMonitor = ({
     
     // Update last seen time if available
     if (data.last_seen_at) {
-      const lastSeen = new Date(data.last_seen_at).getTime();
-      setLastUpdateTime(lastSeen);
+      setLastSeenAt(data.last_seen_at);
       
-      console.log(`Device ${data.system_id} status update:`, {
+      const lastSeen = new Date(data.last_seen_at).getTime();
+      const now = Date.now();
+      const timeSinceLastSeen = now - lastSeen;
+      
+      console.log(`Device ${data.system_id || inverterId} status update:`, {
         lastSeen: new Date(lastSeen).toISOString(),
+        timeSinceLastSeen: Math.floor(timeSinceLastSeen / 1000) + 's',
         isOnline: newOnlineStatus
       });
     }
@@ -160,8 +164,8 @@ export const DeviceStatusMonitor = ({
 
   // Helper function to get the time elapsed since the last update
   const getTimeAgo = () => {
-    if (!lastUpdateTime) return "";
-    return timeAgo(lastUpdateTime);
+    if (!lastSeenAt) return "never";
+    return timeAgo(new Date(lastSeenAt).getTime());
   };
 
   return (
@@ -170,7 +174,7 @@ export const DeviceStatusMonitor = ({
         <>
           <Wifi className="h-4 w-4 text-green-500" />
           <span className="text-xs text-green-400">Online</span>
-          {lastUpdateTime > 0 && (
+          {lastSeenAt && (
             <span className="text-xs text-gray-400">
               • Last seen: {getTimeAgo()}
             </span>
@@ -180,7 +184,7 @@ export const DeviceStatusMonitor = ({
         <>
           <WifiOff className="h-4 w-4 text-red-500" />
           <span className="text-xs text-red-400">Offline</span>
-          {lastUpdateTime > 0 && (
+          {lastSeenAt && (
             <span className="text-xs text-gray-400">
               • Last seen: {getTimeAgo()}
             </span>

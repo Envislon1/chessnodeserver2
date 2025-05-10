@@ -31,8 +31,12 @@ serve(async (req) => {
       },
     })
 
-    // Call the device-status-monitor function with strong cache busting
+    // Generate a unique timestamp for strong cache busting
     const timestamp = new Date().getTime();
+    
+    console.log(`Calling device-status-monitor function with cache buster: ${timestamp}`)
+    
+    // Call the device-status-monitor function with strong cache busting
     const response = await fetch(`${PROJECT_URL}/functions/v1/device-status-monitor?_cb=${timestamp}`, {
       method: 'POST',
       headers: {
@@ -52,11 +56,18 @@ serve(async (req) => {
     
     console.log('Device monitoring execution successful:', result)
 
+    // Count how many devices were updated (changed online status)
+    const updatedDevices = result.results ? result.results.filter((r: any) => r.updated).length : 0
+    const checkedDevices = result.results ? result.results.length : 0
+    
+    console.log(`Checked ${checkedDevices} devices, updated status for ${updatedDevices} devices`)
+
     return new Response(JSON.stringify({ 
       success: true, 
       timestamp: new Date().toISOString(),
-      checked_devices: result.results ? result.results.length : 0,
-      updated_devices: result.results ? result.results.filter((r: any) => r.updated).length : 0
+      checked_devices: checkedDevices,
+      updated_devices: updatedDevices,
+      results: result.results
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
