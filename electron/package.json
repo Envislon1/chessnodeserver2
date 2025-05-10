@@ -1,9 +1,0 @@
-
-{
-  "name": "pvtcloud",
-  "version": "1.0.0",
-  "description": "Technautic Inverter Control System",
-  "main": "main.js",
-  "author": "Lovable",
-  "license": "MIT"
-}
