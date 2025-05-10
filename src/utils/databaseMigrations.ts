@@ -33,17 +33,47 @@ export const verifyLastSeenColumns = async () => {
       return { success: false, error };
     }
     
-    // Safely extract the timestamp from the response
-    let timestamp = null;
+    // Fetch the server time to compare with device timestamps
+    let serverTime = null;
     
     // Check if data exists and is an object
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       // Now it's safe to access these properties
-      timestamp = data.timestamp_utc || data.server_time;
+      serverTime = data.timestamp_utc || data.server_time;
     }
     
-    console.log("Successfully verified last_seen columns");
-    return { success: true, timestamp };
+    // Check and update any devices that should be marked offline
+    const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    
+    // Find devices that were last seen more than 3 minutes ago but are still marked online
+    const { data: outdatedDevices, error: outdatedError } = await supabase
+      .from('inverter_systems')
+      .select('id, system_id, last_seen_at')
+      .eq('is_online', true)
+      .lt('last_seen_at', threeMinsAgo);
+      
+    if (outdatedError) {
+      console.error("Error checking for outdated devices:", outdatedError);
+    } else if (outdatedDevices && outdatedDevices.length > 0) {
+      console.log(`Found ${outdatedDevices.length} devices that should be marked offline`);
+      
+      // Update these devices to offline status
+      for (const device of outdatedDevices) {
+        const { error: updateError } = await supabase
+          .from('inverter_systems')
+          .update({ is_online: false })
+          .eq('id', device.id);
+          
+        if (updateError) {
+          console.error(`Error marking device ${device.system_id} as offline:`, updateError);
+        } else {
+          console.log(`Marked device ${device.system_id} as offline - last seen at ${device.last_seen_at}`);
+        }
+      }
+    }
+    
+    console.log("Successfully verified last_seen columns and updated device statuses");
+    return { success: true, timestamp: serverTime };
   } catch (error) {
     console.error("Error in verifyLastSeenColumns:", error);
     return { success: false, error };

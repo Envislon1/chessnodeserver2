@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react";
 import { Wifi, WifiOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatWestAfricaTime, timeAgo } from "@/utils/westAfricaTime";
-import { toast } from "@/hooks/use-toast";
 
 interface DeviceStatusMonitorProps {
   inverterId: string;
@@ -19,13 +18,9 @@ export const DeviceStatusMonitor = ({
   const [isOnline, setIsOnline] = useState<boolean>(false);
   const [lastUpdateTime, setLastUpdateTime] = useState<number>(0);
   const [systemId, setSystemId] = useState<string | null>(null);
-  const lastCheckRef = useRef<number>(Date.now());
-  const [lastStatusChangeTime, setLastStatusChangeTime] = useState<number>(0);
-
-  // Constants for status determination
-  const OFFLINE_THRESHOLD = 3 * 60 * 1000; // 3 minutes to consider device offline
+  const isInitialMount = useRef(true);
   
-  // Get the system_id for this inverter when component mounts
+  // Get the system_id and initial status for this inverter when component mounts
   useEffect(() => {
     const getDeviceInfo = async () => {
       if (!inverterId) return;
@@ -46,7 +41,7 @@ export const DeviceStatusMonitor = ({
           console.log(`Retrieved device info for ${inverterId}:`, data);
           setSystemId(data.system_id);
           
-          // Initialize online status based on is_online and last_seen_at
+          // Initialize online status based on is_online from database
           setIsOnline(data.is_online || false);
           
           // Update last seen timestamp if available
@@ -87,36 +82,31 @@ export const DeviceStatusMonitor = ({
           filter: `id=eq.${inverterId}`
         }, 
         (payload) => {
-          console.log(`Realtime update received for inverter ${inverterId}:`, payload.new);
           if (payload.new) {
+            console.log(`Realtime update received for inverter ${inverterId}:`, payload.new);
             processDeviceStatusUpdate(payload.new);
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Realtime subscription status for inverter ${inverterId}:`, status);
+      });
     
     return () => {
+      console.log(`Cleaning up realtime subscription for inverter: ${inverterId}`);
       supabase.removeChannel(channel);
     };
   }, [inverterId]);
 
-  // Poll for inverter system status updates periodically
+  // Poll for inverter system status updates periodically as a fallback
   useEffect(() => {
     if (!inverterId) return;
     
     const checkStatus = async () => {
       try {
-        // Only check if enough time has passed since the last check
-        const now = Date.now();
-        if (now - lastCheckRef.current < refreshInterval) {
-          return;
-        }
-        
-        lastCheckRef.current = now;
-        
         const { data, error } = await supabase
           .from('inverter_systems')
-          .select('is_online, last_seen_at, system_id, last_random_value')
+          .select('is_online, last_seen_at, system_id')
           .eq('id', inverterId)
           .single();
           
@@ -134,20 +124,20 @@ export const DeviceStatusMonitor = ({
       }
     };
     
-    // Initial check
-    checkStatus();
-    
     // Set up interval for periodic checks
     const interval = setInterval(checkStatus, refreshInterval);
     
-    return () => clearInterval(interval);
+    return () => {
+      console.log(`Cleaning up status polling for inverter: ${inverterId}`);
+      clearInterval(interval);
+    };
   }, [inverterId, refreshInterval]);
   
   // Function to process device status updates from any source
   const processDeviceStatusUpdate = (data: any) => {
     if (!data) return;
     
-    // Update online status from the database field directly
+    // Update online status directly from the database field
     const newOnlineStatus = data.is_online || false;
     
     // Update last seen time if available
@@ -155,7 +145,7 @@ export const DeviceStatusMonitor = ({
       const lastSeen = new Date(data.last_seen_at).getTime();
       setLastUpdateTime(lastSeen);
       
-      console.log(`Device ${data.system_id} status from database:`, {
+      console.log(`Device ${data.system_id} status update:`, {
         lastSeen: new Date(lastSeen).toISOString(),
         isOnline: newOnlineStatus
       });
@@ -165,10 +155,10 @@ export const DeviceStatusMonitor = ({
     if (newOnlineStatus !== isOnline) {
       console.log(`Device status changed: ${isOnline ? 'online' : 'offline'} -> ${newOnlineStatus ? 'online' : 'offline'}`);
       setIsOnline(newOnlineStatus);
-      setLastStatusChangeTime(Date.now());
     }
   };
 
+  // Helper function to get the time elapsed since the last update
   const getTimeAgo = () => {
     if (!lastUpdateTime) return "";
     return timeAgo(lastUpdateTime);

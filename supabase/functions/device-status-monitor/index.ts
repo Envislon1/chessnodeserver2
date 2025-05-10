@@ -84,8 +84,11 @@ serve(async (req) => {
       deviceLastChecked.set(deviceId, now)
 
       try {
+        // Use a cache busting parameter to ensure we get fresh data
+        const cacheBustParam = `_cb=${now}`
+        
         // Fetch the current data from Firebase
-        const response = await fetch(`${FIREBASE_URL}/${deviceId}.json?${new URLSearchParams({_: now.toString()})}`, {
+        const response = await fetch(`${FIREBASE_URL}/${deviceId}.json?${cacheBustParam}`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache'
@@ -93,11 +96,10 @@ serve(async (req) => {
         })
         
         if (!response.ok) {
-          console.log(`Failed to fetch data for device ${deviceId}: ${response.statusText}`)
+          console.error(`Failed to fetch data for device ${deviceId}: ${response.statusText}`)
           
-          // If we can't reach Firebase, mark device as offline if it's been too long since last seen
-          const lastSeenAt = system.last_seen_at ? new Date(system.last_seen_at).getTime() : 0
-          if (lastSeenAt && (now - lastSeenAt > OFFLINE_THRESHOLD)) {
+          // If we can't reach Firebase, mark device as offline if it was previously online
+          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
             await updateDeviceStatus(supabase, system.id, false)
             deviceStatus.set(deviceId, false)
             results.push({ deviceId, status: 'offline', updated: true, reason: 'firebase_unreachable' })
@@ -111,9 +113,8 @@ serve(async (req) => {
         if (!data) {
           console.log(`No data found for device ${deviceId}`)
           
-          // If no data in Firebase, mark device as offline if it's been too long since last seen
-          const lastSeenAt = system.last_seen_at ? new Date(system.last_seen_at).getTime() : 0
-          if (lastSeenAt && (now - lastSeenAt > OFFLINE_THRESHOLD)) {
+          // If no data in Firebase, mark device as offline if it was previously online
+          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
             await updateDeviceStatus(supabase, system.id, false)
             deviceStatus.set(deviceId, false)
             results.push({ deviceId, status: 'offline', updated: true, reason: 'no_data' })
@@ -131,8 +132,8 @@ serve(async (req) => {
         
         if (randomValue === undefined) {
           console.log(`No status indicator found for device ${deviceId}`)
-          // If no status indicator and it's been too long, mark as offline
-          if (lastSeenAt && (now - lastSeenAt > OFFLINE_THRESHOLD)) {
+          // If no status indicator and was previously online, mark as offline
+          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
             await updateDeviceStatus(supabase, system.id, false)
             deviceStatus.set(deviceId, false)
             results.push({ deviceId, status: 'offline', updated: true, reason: 'no_status_indicator' })
@@ -144,8 +145,9 @@ serve(async (req) => {
         // 1. If random value has changed since the last check, the device is actively sending data
         const valueHasChanged = randomValue !== system.last_random_value
         
-        // 2. If it's been more than the offline threshold with no change, mark as offline
-        const isInactive = lastSeenAt && (now - lastSeenAt > OFFLINE_THRESHOLD)
+        // 2. Check time since last activity
+        const timeSinceLastSeen = lastSeenAt ? now - lastSeenAt : Infinity
+        const isInactive = timeSinceLastSeen > OFFLINE_THRESHOLD
         
         if (valueHasChanged) {
           // Device is active, update as online with new timestamp
@@ -168,11 +170,14 @@ serve(async (req) => {
           }
         } else if (isInactive) {
           // No activity for a while, mark as offline
-          await updateDeviceStatus(supabase, system.id, false)
-          deviceStatus.set(deviceId, false)
-          console.log(`Updated device ${deviceId} as OFFLINE, no activity for > ${OFFLINE_THRESHOLD/1000}s`)
-          results.push({ deviceId, status: 'offline', updated: true, reason: 'inactivity' })
+          if (isCurrentlyOnline || deviceStatus.get(deviceId) === undefined) {
+            await updateDeviceStatus(supabase, system.id, false)
+            deviceStatus.set(deviceId, false)
+            console.log(`Updated device ${deviceId} as OFFLINE, no activity for > ${OFFLINE_THRESHOLD/1000}s`)
+            results.push({ deviceId, status: 'offline', updated: true, reason: 'inactivity' })
+          }
         } else {
+          // No change but not inactive yet, maintain current status
           results.push({ deviceId, status: 'no change', updated: false })
         }
       } catch (error) {
@@ -235,12 +240,16 @@ function getDeviceStatusValue(data: any): number | undefined {
 
 // Helper function to update device status
 async function updateDeviceStatus(supabase: any, systemId: string, isOnline: boolean) {
+  const updateData: any = { is_online: isOnline };
+  
+  // Only update last_seen_at if going online
+  if (isOnline) {
+    updateData.last_seen_at = new Date().toISOString();
+  }
+  
   const { error } = await supabase
     .from('inverter_systems')
-    .update({ 
-      is_online: isOnline,
-      last_seen_at: isOnline ? new Date().toISOString() : null  // Only update last_seen_at if going online
-    })
+    .update(updateData)
     .eq('id', systemId)
   
   if (error) {

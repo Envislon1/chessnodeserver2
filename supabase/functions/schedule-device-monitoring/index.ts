@@ -31,9 +31,9 @@ serve(async (req) => {
       },
     })
 
-    // Call the device-status-monitor function with cache busting
+    // Call the device-status-monitor function with strong cache busting
     const timestamp = new Date().getTime();
-    const response = await fetch(`${PROJECT_URL}/functions/v1/device-status-monitor?_=${timestamp}`, {
+    const response = await fetch(`${PROJECT_URL}/functions/v1/device-status-monitor?_cb=${timestamp}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
