@@ -43,31 +43,25 @@ export const DeviceStatusMonitor = ({
         }
         
         if (data) {
-          console.log(`Retrieved device info:`, data);
+          console.log(`Retrieved device info for ${inverterId}:`, data);
           setSystemId(data.system_id);
           
-          // Initialize online status based on last_seen_at timestamp
+          // Initialize online status based on is_online and last_seen_at
+          setIsOnline(data.is_online || false);
+          
+          // Update last seen timestamp if available
           if (data.last_seen_at) {
             const lastSeen = new Date(data.last_seen_at).getTime();
             setLastUpdateTime(lastSeen);
             
-            // Check if device is actually online based on last_seen_at timestamp
             const now = Date.now();
             const timeSinceLastSeen = now - lastSeen;
-            const deviceIsOnline = timeSinceLastSeen < OFFLINE_THRESHOLD;
             
-            console.log(`Device ${data.system_id} initial status check:`, {
+            console.log(`Device ${data.system_id} initial status:`, {
               lastSeen: new Date(lastSeen).toISOString(),
               timeSinceLastSeen: Math.floor(timeSinceLastSeen / 1000) + 's',
-              deviceIsOnline
+              isOnline: data.is_online
             });
-            
-            setIsOnline(deviceIsOnline);
-            if (deviceIsOnline !== isOnline) {
-              setLastStatusChangeTime(now);
-            }
-          } else {
-            setIsOnline(false);
           }
         }
       } catch (error) {
@@ -153,30 +147,25 @@ export const DeviceStatusMonitor = ({
   const processDeviceStatusUpdate = (data: any) => {
     if (!data) return;
     
+    // Update online status from the database field directly
+    const newOnlineStatus = data.is_online || false;
+    
     // Update last seen time if available
     if (data.last_seen_at) {
       const lastSeen = new Date(data.last_seen_at).getTime();
       setLastUpdateTime(lastSeen);
       
-      // Check if device should be considered offline based on timestamp
-      const now = Date.now();
-      const timeSinceLastSeen = now - lastSeen;
-      const deviceShouldBeOnline = timeSinceLastSeen < OFFLINE_THRESHOLD;
-      
-      console.log(`Device ${data.system_id} status evaluation:`, {
+      console.log(`Device ${data.system_id} status from database:`, {
         lastSeen: new Date(lastSeen).toISOString(),
-        timeSinceLastSeen: Math.floor(timeSinceLastSeen / 1000) + 's',
-        threshold: Math.floor(OFFLINE_THRESHOLD / 1000) + 's',
-        currentStatus: isOnline ? 'online' : 'offline',
-        newStatus: deviceShouldBeOnline ? 'online' : 'offline'
+        isOnline: newOnlineStatus
       });
-      
-      // Only update state if there's a change to prevent unnecessary rerenders
-      if (deviceShouldBeOnline !== isOnline) {
-        console.log(`Device status changed: ${isOnline ? 'online' : 'offline'} -> ${deviceShouldBeOnline ? 'online' : 'offline'}`);
-        setIsOnline(deviceShouldBeOnline);
-        setLastStatusChangeTime(now);
-      }
+    }
+    
+    // Only update state if there's a change to prevent unnecessary rerenders
+    if (newOnlineStatus !== isOnline) {
+      console.log(`Device status changed: ${isOnline ? 'online' : 'offline'} -> ${newOnlineStatus ? 'online' : 'offline'}`);
+      setIsOnline(newOnlineStatus);
+      setLastStatusChangeTime(Date.now());
     }
   };
 
@@ -185,12 +174,9 @@ export const DeviceStatusMonitor = ({
     return timeAgo(lastUpdateTime);
   };
 
-  // Show as offline if we haven't received an update in more than the threshold
-  const isOffline = !isOnline || (lastUpdateTime > 0 && Date.now() - lastUpdateTime > OFFLINE_THRESHOLD);
-
   return (
     <div className="flex items-center space-x-2">
-      {!isOffline ? (
+      {isOnline ? (
         <>
           <Wifi className="h-4 w-4 text-green-500" />
           <span className="text-xs text-green-400">Online</span>

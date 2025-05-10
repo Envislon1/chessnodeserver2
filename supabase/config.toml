@@ -3,6 +3,9 @@ project_id = "hzqnccsmejplilhmisgu"
 
 [functions.device-status-monitor]
 verify_jwt = false
+no_cache = true
 
 [functions.schedule-device-monitoring]
 verify_jwt = false
+no_cache = true
+

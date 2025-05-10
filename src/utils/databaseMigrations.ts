@@ -36,9 +36,9 @@ export const verifyLastSeenColumns = async () => {
     // Safely extract the timestamp from the response
     let timestamp = null;
     
-    // Check if data is an object and has the expected properties
-    if (data && typeof data === 'object') {
-      // Try to access server_time or timestamp_utc properties
+    // Check if data exists and is an object
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      // Now it's safe to access these properties
       timestamp = data.timestamp_utc || data.server_time;
     }
     

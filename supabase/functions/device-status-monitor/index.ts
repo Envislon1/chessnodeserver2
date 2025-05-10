@@ -74,7 +74,8 @@ serve(async (req) => {
         ? ONLINE_POLLING_INTERVAL 
         : OFFLINE_POLLING_INTERVAL
       
-      if (now - lastChecked < checkInterval) {
+      // Always check on first run, then respect interval
+      if (lastChecked > 0 && now - lastChecked < checkInterval) {
         console.log(`Skipping device ${deviceId}, checked recently (${Math.floor((now - lastChecked) / 1000)}s ago)`)
         continue
       }
@@ -84,7 +85,13 @@ serve(async (req) => {
 
       try {
         // Fetch the current data from Firebase
-        const response = await fetch(`${FIREBASE_URL}/${deviceId}.json`)
+        const response = await fetch(`${FIREBASE_URL}/${deviceId}.json?${new URLSearchParams({_: now.toString()})}`, {
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        })
+        
         if (!response.ok) {
           console.log(`Failed to fetch data for device ${deviceId}: ${response.statusText}`)
           
@@ -230,7 +237,10 @@ function getDeviceStatusValue(data: any): number | undefined {
 async function updateDeviceStatus(supabase: any, systemId: string, isOnline: boolean) {
   const { error } = await supabase
     .from('inverter_systems')
-    .update({ is_online: isOnline })
+    .update({ 
+      is_online: isOnline,
+      last_seen_at: isOnline ? new Date().toISOString() : null  // Only update last_seen_at if going online
+    })
     .eq('id', systemId)
   
   if (error) {
