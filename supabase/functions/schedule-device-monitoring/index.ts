@@ -31,10 +31,10 @@ serve(async (req) => {
       },
     })
 
-    // Generate a unique timestamp for strong cache busting
-    const timestamp = new Date().getTime();
+    // Generate a unique timestamp for super aggressive cache busting
+    const timestamp = new Date().getTime() + Math.floor(Math.random() * 100000);
     
-    console.log(`Calling device-status-monitor function with cache buster: ${timestamp}`)
+    console.log(`Calling device-status-monitor function with extreme cache buster: ${timestamp}`)
     
     // Call the device-status-monitor function with strong cache busting
     const response = await fetch(`${PROJECT_URL}/functions/v1/device-status-monitor?_cb=${timestamp}`, {
@@ -43,8 +43,10 @@ serve(async (req) => {
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
+        'Pragma': 'no-cache',
+        'Expires': '0'
       },
+      cache: 'no-store'  // Explicitly disable cache
     })
 
     if (!response.ok) {

@@ -9,15 +9,17 @@ const FIREBASE_URL = 'https://powerverter-pro-default-rtdb.firebaseio.com/'
 
 // For devices that have gone offline, check less frequently (every 5 minutes)
 const OFFLINE_POLLING_INTERVAL = 5 * 60 * 1000 // 5 minutes in milliseconds
-// For devices that are online, check more frequently (every 1 minute)
-const ONLINE_POLLING_INTERVAL = 1 * 60 * 1000 // 1 minute in milliseconds
-// Set device offline if no activity for 3 minutes
-const OFFLINE_THRESHOLD = 3 * 60 * 1000 // 3 minutes in milliseconds
+// For devices that are online, check more frequently (every 30 seconds)
+const ONLINE_POLLING_INTERVAL = 30 * 1000 // 30 seconds in milliseconds
+// Set device offline if no activity for 2 minutes
+const OFFLINE_THRESHOLD = 2 * 60 * 1000 // 2 minutes in milliseconds
 
 // Track when we last checked each device
 const deviceLastChecked = new Map<string, number>()
 // Track the online/offline status of each device
 const deviceStatus = new Map<string, boolean>()
+// Track the last random value we saw for each device
+const deviceLastRandomValue = new Map<string, number>()
 
 // CORS headers for the function
 const corsHeaders = {
@@ -72,6 +74,7 @@ serve(async (req) => {
       // Initialize device status map from database value
       if (!deviceStatus.has(deviceId)) {
         deviceStatus.set(deviceId, isCurrentlyOnline)
+        deviceLastRandomValue.set(deviceId, system.last_random_value || 0)
       }
 
       // Determine if we should check this device now based on its current status
@@ -89,19 +92,20 @@ serve(async (req) => {
       deviceLastChecked.set(deviceId, now)
 
       try {
-        // Generate timestamp for strong cache busting
-        const timestampNow = new Date().getTime()
-        // Use a cache busting parameter to ensure we get fresh data
-        const cacheBustParam = `_cb=${timestampNow}`
+        // Use a unique timestamp for aggressive cache busting
+        const timestamp = Date.now() + Math.floor(Math.random() * 10000)
         
-        console.log(`Checking device ${deviceId} with cache buster: ${cacheBustParam}`)
+        console.log(`Checking device ${deviceId} with cache buster: ${timestamp}`)
         
-        // Fetch the current data from Firebase
-        const response = await fetch(`${FIREBASE_URL}/${deviceId}.json?${cacheBustParam}`, {
+        // Fetch the current data from Firebase with aggressive cache busting
+        const response = await fetch(`${FIREBASE_URL}/${deviceId}.json?_cb=${timestamp}`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          }
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          },
+          // Force reload to bypass cache
+          cache: 'reload'
         })
         
         if (!response.ok) {
@@ -132,12 +136,13 @@ serve(async (req) => {
           continue
         }
 
-        // Extract the random value from the Firebase data (crucial for detecting changes)
+        // Extract the random value from the Firebase data
         const randomValue = getDeviceRandomValue(data)
         const lastSeenAt = system.last_seen_at ? new Date(system.last_seen_at).getTime() : 0
+        const lastTrackedRandomValue = deviceLastRandomValue.get(deviceId) || 0
         
         // Log for debugging
-        console.log(`Device ${deviceId}: current random value = ${randomValue}, previous = ${system.last_random_value}, last seen: ${system.last_seen_at}`)
+        console.log(`Device ${deviceId}: current random value = ${randomValue}, previous stored = ${system.last_random_value}, previous tracked = ${lastTrackedRandomValue}, last seen: ${system.last_seen_at}`)
         
         if (randomValue === undefined) {
           console.log(`No random value found for device ${deviceId}`)
@@ -150,18 +155,21 @@ serve(async (req) => {
           continue
         }
 
-        // Logic for active devices:
-        // If random value has changed since the last check, the device is actively sending data
-        const valueHasChanged = randomValue !== system.last_random_value && randomValue !== 0
+        // Crucial check: compare with both database and memory values for redundancy
+        const dbValueHasChanged = randomValue !== system.last_random_value && randomValue > 0
+        const trackedValueHasChanged = randomValue !== lastTrackedRandomValue && randomValue > 0
+        // Update our tracking of last random value
+        deviceLastRandomValue.set(deviceId, randomValue)
         
         // Check time since last activity
         const timeSinceLastSeen = lastSeenAt ? now - lastSeenAt : Infinity
         const isInactive = timeSinceLastSeen > OFFLINE_THRESHOLD
         
         // Debug logs
-        console.log(`Device ${deviceId}: valueHasChanged=${valueHasChanged}, timeSinceLastSeen=${Math.floor(timeSinceLastSeen/1000)}s, isInactive=${isInactive}`)
+        console.log(`Device ${deviceId}: dbValueChanged=${dbValueHasChanged}, trackedValueChanged=${trackedValueHasChanged}, timeSinceLastSeen=${Math.floor(timeSinceLastSeen/1000)}s, isInactive=${isInactive}`)
         
-        if (valueHasChanged) {
+        // If either comparison shows a change, update the device as active
+        if (dbValueHasChanged || trackedValueHasChanged) {
           // Device is active, update as online with new timestamp and random_value
           const { error: updateError } = await supabase
             .from('inverter_systems')
@@ -178,7 +186,7 @@ serve(async (req) => {
           } else {
             console.log(`Updated device ${deviceId} as ONLINE, new random_value: ${randomValue}`)
             deviceStatus.set(deviceId, true)
-            results.push({ deviceId, status: 'online', updated: true })
+            results.push({ deviceId, status: 'online', updated: !isCurrentlyOnline, new_random: randomValue })
           }
         } else if (isInactive) {
           // No activity for a while, mark as offline
@@ -216,22 +224,24 @@ serve(async (req) => {
 
 // Helper function to extract random value from different data formats
 function getDeviceRandomValue(data: any): number | undefined {
+  // Direct access to random_value if it exists
+  if (data.random_value !== undefined) {
+    return parseInt(String(data.random_value), 10) || 0
+  }
+  
   // First check if the data field contains a comma-separated string with the random value at position 20
   if (data.data && typeof data.data === 'string') {
     try {
       const values = data.data.split(',')
       if (values.length >= 21) {
         // From the hardware code, we know the random value is at position 20
-        return parseInt(values[20], 10) || 0
+        const randomValue = parseInt(values[20], 10) || 0
+        console.log(`Found random value ${randomValue} in data string at position 20`)
+        return randomValue
       }
     } catch (e) {
       console.error(`Error parsing data string:`, e)
     }
-  }
-  
-  // Check if random_value exists directly in the data object
-  if (data.random_value !== undefined) {
-    return parseInt(String(data.random_value), 10) || 0
   }
   
   return undefined
