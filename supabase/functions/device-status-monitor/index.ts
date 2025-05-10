@@ -134,17 +134,13 @@ serve(async (req) => {
         }
 
         // Logic for active devices:
-        // 1. If random value has changed or it's a non-zero value (Arduino active), mark as online and update timestamp
-        const shouldUpdateTimestamp = 
-          (randomValue !== system.last_random_value && randomValue > 0) || 
-          (randomValue > 0 && system.last_random_value === 0);
+        // 1. If random value has changed since the last check, the device is actively sending data
+        const valueHasChanged = randomValue !== system.last_random_value
         
-        // 2. If it's been more than the offline threshold with no change or value=0, mark as offline
-        const shouldMarkOffline = 
-          (lastSeenAt && (now - lastSeenAt > OFFLINE_THRESHOLD)) && 
-          (randomValue === 0 || randomValue === system.last_random_value);
+        // 2. If it's been more than the offline threshold with no change, mark as offline
+        const isInactive = lastSeenAt && (now - lastSeenAt > OFFLINE_THRESHOLD)
         
-        if (shouldUpdateTimestamp) {
+        if (valueHasChanged) {
           // Device is active, update as online with new timestamp
           const { error: updateError } = await supabase
             .from('inverter_systems')
@@ -163,7 +159,7 @@ serve(async (req) => {
             deviceStatus.set(deviceId, true)
             results.push({ deviceId, status: 'online', updated: true })
           }
-        } else if (shouldMarkOffline) {
+        } else if (isInactive) {
           // No activity for a while, mark as offline
           await updateDeviceStatus(supabase, system.id, false)
           deviceStatus.set(deviceId, false)
